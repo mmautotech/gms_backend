@@ -1,0 +1,55 @@
+# -----------------
+# Node / General
+# -----------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+logs/
+*.log
+*.pid
+*.seed
+*.pid.lock
+.tmp/
+.temp/
+.cache/
+.eslintcache
+.stylelintcache
+
+# -----------------
+# Build / Output
+# -----------------
+dist/
+build/
+out/
+release/
+coverage/
+.nyc_output/
+
+# Electron Forge / Webpack
+.webpack/
+app/.webpack/
+*.asar
+
+# -----------------
+# OS files
+# -----------------
+.DS_Store
+Thumbs.db
+Icon?
+ehthumbs.db
+Desktop.ini
+
+# -----------------
+# Editors / IDE
+# -----------------
+.vscode/
+.idea/
+*.iml
+
+# -----------------
+# Misc caches
+# -----------------
+.parcel-cache/
+.tailwindcss-cache/
