@@ -6,6 +6,9 @@ import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// 🔐 Require auth for everything under this router
+router.use(requireAuth);
+
 // Helpers
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -21,7 +24,7 @@ function pick(obj, keys) {
 }
 
 /** CREATE: Pre-booking (status=pending, preBookingDate=now) */
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', async (req, res) => {
     try {
         const data = pick(req.body || {}, allowedCreateFields);
 
@@ -49,7 +52,7 @@ router.post('/', requireAuth, async (req, res) => {
 });
 
 /** LIST: filterable */
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', async (req, res) => {
     try {
         const {
             status, regNo, from, to, page = 1, limit = 20, sort = '-createdAt'
@@ -83,7 +86,7 @@ router.get('/', requireAuth, async (req, res) => {
 });
 
 /** GET by id */
-router.get('/:id', requireAuth, async (req, res) => {
+router.get('/:id', async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return res.status(400).json({ error: 'Invalid id' });
     const doc = await Booking.findById(id);
@@ -92,7 +95,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 });
 
 /** PATCH details (only while not complete/cancelled) */
-router.patch('/:id', requireAuth, async (req, res) => {
+router.patch('/:id', async (req, res) => {
     try {
         const { id } = req.params;
         if (!isValidObjectId(id)) return res.status(400).json({ error: 'Invalid id' });
@@ -122,7 +125,7 @@ router.patch('/:id', requireAuth, async (req, res) => {
 });
 
 /** STATUS TRANSITIONS */
-router.patch('/:id/status', requireAuth, async (req, res) => {
+router.patch('/:id/status', async (req, res) => {
     try {
         const { id } = req.params;
         const { action } = req.body || {}; // 'confirm' | 'arrive' | 'complete' | 'cancel'
