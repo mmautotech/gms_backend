@@ -22,7 +22,9 @@ const BookingSchema = new mongoose.Schema(
         clientName: { type: String, required: true, trim: true },
         clientAddress: { type: String, trim: true, default: '' },
         phoneNumber: { type: String, trim: true, default: '' },
-        remarks: { type: String, trim: true, default: '' },
+
+        // ✅ Replaced remarks with services array
+        services: [{ type: String, trim: true }],
 
         // Scheduled arrival (entered at pre-booking time)
         scheduledArrivalDate: { type: Date, required: true },
@@ -64,8 +66,8 @@ BookingSchema.pre('save', function (next) {
         // Allow saving only if we're not changing business fields
         const changed = this.modifiedPaths();
         const forbidden = [
-            'carRegNo', 'makeModel', 'clientName', 'clientAddress', 'phoneNumber', 'remarks',
-            'scheduledArrivalDate', 'bookingPrice', 'labourCost', 'partsCost'
+            'carRegNo', 'makeModel', 'clientName', 'clientAddress', 'phoneNumber',
+            'services', 'scheduledArrivalDate', 'bookingPrice', 'labourCost', 'partsCost'
         ];
         const touchesForbidden = changed.some(p => forbidden.includes(p));
         if (touchesForbidden) {

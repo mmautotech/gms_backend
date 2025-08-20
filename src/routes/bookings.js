@@ -28,12 +28,10 @@ router.post('/', async (req, res) => {
     try {
         const data = pick(req.body || {}, allowedCreateFields);
 
-        // Basic validation
         const required = ['carRegNo', 'makeModel', 'clientName', 'scheduledArrivalDate'];
         const missing = required.filter(f => !data[f]);
         if (missing.length) return res.status(400).json({ error: `Missing: ${missing.join(', ')}` });
 
-        // Parse dates/numbers safely
         if (data.scheduledArrivalDate) data.scheduledArrivalDate = new Date(data.scheduledArrivalDate);
         ['bookingPrice', 'labourCost', 'partsCost'].forEach(f => {
             if (data[f] != null) data[f] = Number(data[f]);
@@ -54,9 +52,7 @@ router.post('/', async (req, res) => {
 /** LIST: filterable */
 router.get('/', async (req, res) => {
     try {
-        const {
-            status, regNo, from, to, page = 1, limit = 20, sort = '-createdAt'
-        } = req.query;
+        const { status, regNo, from, to, page = 1, limit = 20, sort = '-createdAt' } = req.query;
 
         const q = {};
         if (status) q.status = status;
@@ -82,6 +78,31 @@ router.get('/', async (req, res) => {
         });
     } catch (err) {
         res.status(500).json({ error: err.message || 'Failed to fetch bookings' });
+    }
+});
+
+/** NEW: LIST only arrived bookings */
+router.get('/status/arrived', async (req, res) => {
+    try {
+        const { page = 1, limit = 20, sort = '-createdAt' } = req.query;
+
+        const skip = (Number(page) - 1) * Number(limit);
+        const q = { status: BOOKING_STATUS.ARRIVED };
+
+        const [items, total] = await Promise.all([
+            Booking.find(q).sort(sort).skip(skip).limit(Number(limit)),
+            Booking.countDocuments(q)
+        ]);
+
+        res.json({
+            ok: true,
+            total,
+            page: Number(page),
+            pages: Math.ceil(total / Number(limit)),
+            items
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Failed to fetch arrived bookings' });
     }
 });
 
@@ -124,18 +145,21 @@ router.patch('/:id', async (req, res) => {
     }
 });
 
+
+
+
+
 /** STATUS TRANSITIONS */
 router.patch('/:id/status', async (req, res) => {
     try {
         const { id } = req.params;
-        const { action } = req.body || {}; // 'confirm' | 'arrive' | 'complete' | 'cancel'
+        const { action } = req.body || {};
         if (!isValidObjectId(id)) return res.status(400).json({ error: 'Invalid id' });
         if (!action) return res.status(400).json({ error: 'Missing action' });
 
         const doc = await Booking.findById(id);
         if (!doc) return res.status(404).json({ error: 'Not found' });
 
-        // Guard: once complete/cancelled, no more transitions
         if ([BOOKING_STATUS.COMPLETE, BOOKING_STATUS.CANCELLED].includes(doc.status)) {
             return res.status(400).json({ error: `Cannot change status from ${doc.status}` });
         }
@@ -168,7 +192,6 @@ router.patch('/:id/status', async (req, res) => {
                 break;
 
             case 'cancel':
-                // Allowed any time before complete
                 doc.status = BOOKING_STATUS.CANCELLED;
                 doc.cancelledAt = now;
                 break;

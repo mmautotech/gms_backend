@@ -4,6 +4,7 @@ import cors from 'cors';
 import mongoose from 'mongoose';
 import authRoutes from './src/routes/auth.js';
 import bookingRoutes from './src/routes/bookings.js';
+import serviceRoutes from './src/routes/serviceRoutes.js';
 
 const app = express();
 
@@ -35,7 +36,7 @@ app.use(express.json());
 app.get('/api/health', (_, res) => res.json({ ok: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/bookings', bookingRoutes);
-
+app.use('/api/services', serviceRoutes);
 /** DB + Server */
 const { MONGO_URI, PORT = 5000 } = process.env;
 
