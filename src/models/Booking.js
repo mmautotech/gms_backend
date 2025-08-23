@@ -24,7 +24,7 @@ const BookingSchema = new mongoose.Schema(
         phoneNumber: { type: String, trim: true, default: '' },
 
         // ✅ Replaced remarks with services array
-        services: [{ type: String, trim: true }],
+      services: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Service' }],
 
         // Scheduled arrival (entered at pre-booking time)
         scheduledArrivalDate: { type: Date, required: true },
