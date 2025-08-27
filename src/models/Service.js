@@ -14,11 +14,8 @@ const ServiceSchema = new mongoose.Schema(
       default: true, // admin can disable without deleting
     },
   },
-  {
-    timestamps: true, // adds createdAt & updatedAt
-  }
+  { timestamps: true }
 );
 
 const Service = mongoose.model("Service", ServiceSchema);
-
 export default Service;

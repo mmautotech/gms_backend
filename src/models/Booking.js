@@ -1,80 +1,96 @@
 // src/models/Booking.js
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 export const BOOKING_STATUS = {
-    PENDING: 'pending',        // Pre-booked (default)
-    CONFIRMED: 'confirmed',    // Optional step before arrival
-    ARRIVED: 'arrived',        // Vehicle checked-in to garage
-    COMPLETE: 'complete',      // Vehicle out of garage
-    CANCELLED: 'cancelled'     // Cancelled any time before complete
+    PENDING: "pending",
+    ARRIVED: "arrived",
+    COMPLETE: "complete",
+    CANCELLED: "cancelled",
 };
 
 const moneyOpts = { type: Number, min: 0, default: 0 };
 
 const BookingSchema = new mongoose.Schema(
     {
-        // auto: the date the pre-booking is created (current date)
-        preBookingDate: { type: Date, default: Date.now, immutable: true, index: true },
-
-        // Business fields
         carRegNo: { type: String, required: true, trim: true, index: true },
         makeModel: { type: String, required: true, trim: true },
         clientName: { type: String, required: true, trim: true },
-        clientAddress: { type: String, trim: true, default: '' },
-        phoneNumber: { type: String, trim: true, default: '' },
+        clientAddress: { type: String, trim: true, default: "" },
+        phoneNumber: { type: String, trim: true, default: "" },
 
-        // ✅ Replaced remarks with services array
-      services: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Service' }],
+        services: [{ type: mongoose.Schema.Types.ObjectId, ref: "Service" }],
 
-        // Scheduled arrival (entered at pre-booking time)
         scheduledArrivalDate: { type: Date, required: true },
 
-        // Costs
-        bookingPrice: moneyOpts, // e.g., diagnostic/booking charges
+        bookingPrice: moneyOpts,
         labourCost: moneyOpts,
         partsCost: moneyOpts,
 
-        // Status
         status: {
             type: String,
             enum: Object.values(BOOKING_STATUS),
             default: BOOKING_STATUS.PENDING,
-            index: true
+            index: true,
         },
 
-        // Status timestamps (auto managed in routes)
-        confirmedAt: { type: Date },
         arrivedAt: { type: Date },
         completedAt: { type: Date },
         cancelledAt: { type: Date },
 
-        // Audit
-        createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-        updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+        createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+
+        upsells: [{ type: mongoose.Schema.Types.ObjectId, ref: "Upsell" }],
     },
-    { timestamps: true }
+    {
+        timestamps: true,
+        toJSON: { virtuals: true },
+        toObject: { virtuals: true },
+    }
 );
 
-// Handy virtual for totals
-BookingSchema.virtual('totalCost').get(function () {
-    return (this.bookingPrice || 0) + (this.labourCost || 0) + (this.partsCost || 0);
+// --- Virtuals ---
+// Total expense = labour + parts
+BookingSchema.virtual("totalExpense").get(function () {
+    return (this.labourCost || 0) + (this.partsCost || 0);
 });
 
-// Optional: prevent edits after completion/cancellation at DB level
-BookingSchema.pre('save', function (next) {
-    if (!this.isNew && (this.status === BOOKING_STATUS.COMPLETE || this.status === BOOKING_STATUS.CANCELLED)) {
-        // Allow saving only if we're not changing business fields
+// Profit = bookingPrice - totalExpense
+BookingSchema.virtual("profit").get(function () {
+    return (this.bookingPrice || 0) - this.totalExpense;
+});
+
+// Profit percentage
+BookingSchema.virtual("profitPercentage").get(function () {
+    if (!this.bookingPrice) return 0;
+    return ((this.bookingPrice - this.totalExpense) / this.bookingPrice) * 100;
+});
+
+// --- Pre-save validation ---
+BookingSchema.pre("save", function (next) {
+    // Prevent editing key fields if booking is complete or cancelled
+    if (!this.isNew && [BOOKING_STATUS.COMPLETE, BOOKING_STATUS.CANCELLED].includes(this.status)) {
         const changed = this.modifiedPaths();
         const forbidden = [
-            'carRegNo', 'makeModel', 'clientName', 'clientAddress', 'phoneNumber',
-            'services', 'scheduledArrivalDate', 'bookingPrice', 'labourCost', 'partsCost'
+            "carRegNo",
+            "makeModel",
+            "clientName",
+            "clientAddress",
+            "phoneNumber",
+            "services",
+            "scheduledArrivalDate",
+            "bookingPrice",
+            "labourCost",
+            "partsCost",
         ];
-        const touchesForbidden = changed.some(p => forbidden.includes(p));
-        if (touchesForbidden) {
-            return next(new Error('Completed or cancelled bookings cannot be edited.'));
+        if (changed.some((p) => forbidden.includes(p))) {
+            return next(new Error("Completed or cancelled bookings cannot be edited."));
         }
     }
     next();
 });
 
-export default mongoose.model('Booking', BookingSchema);
+// --- Indexes ---
+BookingSchema.index({ carRegNo: 1, status: 1 });
+
+export default mongoose.model("Booking", BookingSchema);
