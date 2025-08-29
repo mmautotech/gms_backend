@@ -7,24 +7,17 @@ import {
     deleteUpsell,
 } from "../controllers/upsellController.js";
 import { requireAuth } from "../middleware/auth.js";
-import { createUpsellValidator, updateUpsellValidator } from "../validators/upSell.js";
+import { createUpsellValidator, updateUpsellValidator } from "../validators/upsell.js";
 import { validate } from "../middleware/validate.js";
 
 const router = express.Router();
 
-// Create upsell
-router.post("/", requireAuth, createUpsellValidator, validate, createUpsell);
+router.use(requireAuth); // applies to all routes
 
-// Get all upsells for booking
-router.get("/booking/:bookingId", requireAuth, getUpsellsByBooking);
-
-// Get single upsell
-router.get("/:id", requireAuth, getUpsellById);
-
-// Update upsell
-router.put("/:id", requireAuth, updateUpsellValidator, validate, updateUpsell);
-
-// Delete upsell
-router.delete("/:id", requireAuth, deleteUpsell);
+router.post("/booking/:bookingId", ...createUpsellValidator, validate, createUpsell);
+router.put("/:bookingId/:upsellId", ...updateUpsellValidator, validate, updateUpsell);
+router.get("/booking/:bookingId", getUpsellsByBooking);
+router.get("/:bookingId/:upsellId", getUpsellById);
+router.delete("/:bookingId/:upsellId", deleteUpsell);
 
 export default router;

@@ -1,27 +1,43 @@
-import { body, param } from "express-validator";
+import { body, param, query } from "express-validator";
+// ========================
+// --- Upsell Validators ---
+// ========================
 
+// --- Create Upsell (at Arrival) ---
 export const createUpsellValidator = [
-    body("bookingId")
-        .notEmpty().withMessage("Booking ID is required")
-        .isMongoId().withMessage("Invalid booking ID"),
-    body("partId")
-        .notEmpty().withMessage("Part ID is required")
-        .isMongoId().withMessage("Invalid part ID"),
-    body("partPrice")
-        .notEmpty().withMessage("Part price is required")
-        .isFloat({ min: 0 }).withMessage("Part price must be a positive number"),
-    body("labourPrice")
-        .notEmpty().withMessage("Labour price is required")
-        .isFloat({ min: 0 }).withMessage("Labour price must be a positive number"),
-    body("supplierId")
-        .optional()
-        .isMongoId().withMessage("Invalid supplier ID"),
+    body("services")
+        .exists().withMessage("services is required")
+        .isArray({ min: 1 }).withMessage("services must be a non-empty array"),
+    body("services.*")
+        .isMongoId().withMessage("each service must be a valid ID"),
+
+    body("parts")
+        .optional().isArray().withMessage("parts must be an array"),
+    body("parts.*")
+        .isMongoId().withMessage("each part must be a valid ID"),
+
+    body("upsellPrice")
+        .exists().isFloat({ min: 0 }).withMessage("upsellPrice must be >= 0"),
+    body("labourCost")
+        .exists().isFloat({ min: 0 }).withMessage("labourCost must be >= 0"),
+    body("partsCost")
+        .exists().isFloat({ min: 0 }).withMessage("partsCost must be >= 0"),
+
+    body("createdBy").optional().isMongoId(),
+    body("updatedBy").optional().isMongoId(),
 ];
 
+// --- Update Upsell ---
 export const updateUpsellValidator = [
-    param("id").isMongoId().withMessage("Invalid upsell ID"),
-    body("partId").optional().isMongoId().withMessage("Invalid part ID"),
-    body("partPrice").optional().isFloat({ min: 0 }).withMessage("Price must be positive"),
-    body("labourPrice").optional().isFloat({ min: 0 }).withMessage("Labour must be positive"),
-    body("supplierId").optional().isMongoId().withMessage("Invalid supplier ID"),
+    body("services").optional().isArray(),
+    body("services.*").isMongoId(),
+
+    body("parts").optional().isArray(),
+    body("parts.*").isMongoId(),
+
+    body("upsellPrice").optional().isFloat({ min: 0 }),
+    body("labourCost").optional().isFloat({ min: 0 }),
+    body("partsCost").optional().isFloat({ min: 0 }),
+
+    body("updatedBy").optional().isMongoId(),
 ];

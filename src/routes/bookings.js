@@ -1,4 +1,3 @@
-// src/routes/bookings.js
 import express from "express";
 import { requireAuth } from "../middleware/auth.js";
 import {
@@ -13,18 +12,20 @@ import {
   updateBookingValidator,
   updateBookingStatusValidator,
   listBookingValidator,
-  getBookingByIdValidator,   // ✅ import
+  getBookingByIdValidator,
 } from "../validators/booking.js";
 import { validate } from "../middleware/validate.js";
 
 const router = express.Router();
 
+// Apply token authentication to all routes in this router
 router.use(requireAuth);
 
-router.post("/", createBookingValidator, validate, createBooking);
-router.get("/", listBookingValidator, validate, listBookings);
-router.get("/:id", getBookingByIdValidator, validate, getBookingById);  // ✅ validate ID
-router.patch("/:id", updateBookingValidator, validate, updateBooking);
-router.patch("/status/:id", updateBookingStatusValidator, validate, updateBookingStatus);
+// Spread validator arrays, then validate, then controller
+router.post("/", ...createBookingValidator, validate, createBooking);
+router.get("/", ...listBookingValidator, validate, listBookings);
+router.get("/:id", ...getBookingByIdValidator, validate, getBookingById);
+router.patch("/:id", ...updateBookingValidator, validate, updateBooking);
+router.patch("/status/:id", ...updateBookingStatusValidator, validate, updateBookingStatus);
 
 export default router;

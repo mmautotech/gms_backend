@@ -1,97 +1,98 @@
-// controllers/upsellController.js
-import Upsell from "../models/Upsell.js";
+// src/controllers/upsellController.js
+import mongoose from "mongoose";
+import Booking from "../models/Booking.js";
+import { computeTotals } from "./bookingController.js"; // reuse helper
 
-/**
- * Create a new upsell for a booking
- */
+const sendError = (res, status = 500, message = "Server Error") =>
+    res.status(status).json({ success: false, error: message });
+
+const BOOKING_POPULATE = [
+    { path: "services", select: "name" },
+    { path: "upsells.services", select: "name" },
+    { path: "upsells.parts", select: "partName partNumber" },
+];
+
+// --- Add Upsell ---
 export const createUpsell = async (req, res) => {
     try {
-        const { bookingId, partId, partPrice, labourPrice, supplierId } = req.body;
-        const createdBy = req.user._id; // assuming auth middleware sets req.user
+        const { bookingId } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(bookingId)) return sendError(res, 400, "Invalid booking ID");
 
-        const upsell = await Upsell.create({
-            bookingId,
-            partId,
-            partPrice,
-            labourPrice,
-            supplierId: supplierId || null,
-            createdBy,
-        });
+        let booking = await Booking.findById(bookingId);
+        if (!booking) return sendError(res, 404, "Booking not found");
 
-        res.status(201).json({ success: true, data: upsell });
+        booking.upsells.push({ ...req.body, createdBy: req.user?._id });
+        await computeTotals(booking);
+        await booking.save();
+
+        const populated = await Booking.findById(booking._id).populate(BOOKING_POPULATE);
+        res.status(201).json({ success: true, booking: populated });
     } catch (error) {
-        res.status(400).json({ success: false, message: error.message });
+        console.error("Create Upsell Error:", error);
+        sendError(res, 500, error.message);
     }
 };
 
-/**
- * Get all upsells for a specific booking
- */
+// --- Get All Upsells ---
 export const getUpsellsByBooking = async (req, res) => {
     try {
         const { bookingId } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(bookingId)) return sendError(res, 400, "Invalid booking ID");
 
-        const upsells = await Upsell.find({ bookingId })
-            .populate("partId", "partName partNumber")
-            .populate("supplierId", "name contact")
-            .populate("createdBy", "username email");
+        const booking = await Booking.findById(bookingId).populate(BOOKING_POPULATE);
+        if (!booking) return sendError(res, 404, "Booking not found");
 
-        res.json({ success: true, data: upsells });
+        res.json({ success: true, upsells: booking.upsells });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        console.error("Get Upsells Error:", error);
+        sendError(res, 500, error.message);
     }
 };
 
-/**
- * Get single upsell by ID
- */
-export const getUpsellById = async (req, res) => {
-    try {
-        const upsell = await Upsell.findById(req.params.id)
-            .populate("partId", "partName partNumber")
-            .populate("supplierId", "name contact")
-            .populate("createdBy", "username email");
-
-        if (!upsell) return res.status(404).json({ success: false, message: "Upsell not found" });
-
-        res.json({ success: true, data: upsell });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-};
-
-/**
- * Update an upsell
- */
+// --- Update Upsell ---
 export const updateUpsell = async (req, res) => {
     try {
-        const { partId, partPrice, labourPrice, supplierId } = req.body;
+        const { bookingId, upsellId } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(bookingId)) return sendError(res, 400, "Invalid booking ID");
 
-        const upsell = await Upsell.findByIdAndUpdate(
-            req.params.id,
-            { partId, partPrice, labourPrice, supplierId },
-            { new: true, runValidators: true }
-        );
+        let booking = await Booking.findById(bookingId);
+        if (!booking) return sendError(res, 404, "Booking not found");
 
-        if (!upsell) return res.status(404).json({ success: false, message: "Upsell not found" });
+        const upsell = booking.upsells.id(upsellId);
+        if (!upsell) return sendError(res, 404, "Upsell not found");
 
-        res.json({ success: true, data: upsell });
+        Object.assign(upsell, req.body, { updatedBy: req.user?._id });
+        await computeTotals(booking);
+        await booking.save();
+
+        const populated = await Booking.findById(booking._id).populate(BOOKING_POPULATE);
+        res.json({ success: true, booking: populated });
     } catch (error) {
-        res.status(400).json({ success: false, message: error.message });
+        console.error("Update Upsell Error:", error);
+        sendError(res, 500, error.message);
     }
 };
 
-/**
- * Delete an upsell
- */
+// --- Delete Upsell ---
 export const deleteUpsell = async (req, res) => {
     try {
-        const upsell = await Upsell.findByIdAndDelete(req.params.id);
+        const { bookingId, upsellId } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(bookingId)) return sendError(res, 400, "Invalid booking ID");
 
-        if (!upsell) return res.status(404).json({ success: false, message: "Upsell not found" });
+        let booking = await Booking.findById(bookingId);
+        if (!booking) return sendError(res, 404, "Booking not found");
 
-        res.json({ success: true, message: "Upsell deleted" });
+        const upsell = booking.upsells.id(upsellId);
+        if (!upsell) return sendError(res, 404, "Upsell not found");
+
+        upsell.deleteOne();
+        await computeTotals(booking);
+        await booking.save();
+
+        const populated = await Booking.findById(booking._id).populate(BOOKING_POPULATE);
+        res.json({ success: true, booking: populated });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        console.error("Delete Upsell Error:", error);
+        sendError(res, 500, error.message);
     }
 };

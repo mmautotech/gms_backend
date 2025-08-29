@@ -15,30 +15,11 @@ import {
 
 const router = express.Router();
 
-router.post(
-  "/",
-  requireAuth,
-  createServiceValidator,
-  validate,
-  createService
-);
+router.use(requireAuth); // apply token auth to all routes
 
-router.get("/", requireAuth, getAllServices);
-
-router.patch(
-  "/:id",
-  requireAuth,
-  updateServiceValidator,
-  validate,
-  updateService
-);
-
-router.delete(
-  "/:id",
-  requireAuth,
-  deleteServiceValidator,
-  validate,
-  deleteService
-);
+router.post("/", ...createServiceValidator, validate, createService);
+router.get("/", getAllServices);
+router.patch("/:id", ...updateServiceValidator, validate, updateService);
+router.delete("/:id", ...deleteServiceValidator, validate, deleteService);
 
 export default router;

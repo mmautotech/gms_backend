@@ -11,11 +11,12 @@ import { createPartValidator, updatePartValidator } from "../validators/part.js"
 import { validate } from "../middleware/validate.js";
 
 const router = express.Router();
+router.use(requireAuth); // apply token auth to all routes
 
-router.post("/", requireAuth, createPartValidator, validate, createPart);
-router.get("/", requireAuth, getAllParts);
-router.get("/:id", requireAuth, getPartById);
-router.put("/:id", requireAuth, updatePartValidator, validate, updatePart);
-router.delete("/:id", requireAuth, deletePart);
+router.post("/", ...createPartValidator, validate, createPart);
+router.get("/", getAllParts);
+router.get("/:id", getPartById);
+router.put("/:id", ...updatePartValidator, validate, updatePart);
+router.delete("/:id", deletePart);
 
 export default router;

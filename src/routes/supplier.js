@@ -11,11 +11,12 @@ import { createSupplierValidator, updateSupplierValidator } from "../validators/
 import { validate } from "../middleware/validate.js";
 
 const router = express.Router();
+router.use(requireAuth);
 
-router.post("/", requireAuth, createSupplierValidator, validate, createSupplier);
-router.get("/", requireAuth, getAllSuppliers);
-router.get("/:id", requireAuth, getSupplierById);
-router.put("/:id", requireAuth, updateSupplierValidator, validate, updateSupplier);
-router.delete("/:id", requireAuth, deleteSupplier);
+router.post("/", ...createSupplierValidator, validate, createSupplier);
+router.get("/", getAllSuppliers);
+router.get("/:id", getSupplierById);
+router.put("/:id", ...updateSupplierValidator, validate, updateSupplier);
+router.delete("/:id", deleteSupplier);
 
 export default router;
