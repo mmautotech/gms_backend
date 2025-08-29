@@ -1,3 +1,4 @@
+// src/routes/upsell.js
 import express from "express";
 import {
     createUpsell,
@@ -7,17 +8,55 @@ import {
     deleteUpsell,
 } from "../controllers/upsellController.js";
 import { requireAuth } from "../middleware/auth.js";
-import { createUpsellValidator, updateUpsellValidator } from "../validators/upsell.js";
+import {
+    createUpsellValidator,
+    updateUpsellValidator,
+    upsellIdValidators,
+    bookingIdValidator,
+} from "../validators/upsell.js";
 import { validate } from "../middleware/validate.js";
 
 const router = express.Router();
 
-router.use(requireAuth); // applies to all routes
+// 🔒 Require authentication for all routes
+router.use(requireAuth);
 
-router.post("/booking/:bookingId", ...createUpsellValidator, validate, createUpsell);
-router.put("/:bookingId/:upsellId", ...updateUpsellValidator, validate, updateUpsell);
-router.get("/booking/:bookingId", getUpsellsByBooking);
-router.get("/:bookingId/:upsellId", getUpsellById);
-router.delete("/:bookingId/:upsellId", deleteUpsell);
+// 📌 Upsell Routes
+router.post(
+    "/booking/:bookingId",
+    bookingIdValidator,
+    ...createUpsellValidator,
+    validate,
+    createUpsell
+);
+
+router.get(
+    "/booking/:bookingId",
+    bookingIdValidator,
+    validate,
+    getUpsellsByBooking
+);
+
+router.get(
+    "/booking/:bookingId/upsell/:upsellId",
+    ...upsellIdValidators,
+    validate,
+    getUpsellById
+);
+
+router.put(
+    "/booking/:bookingId/upsell/:upsellId",
+    ...upsellIdValidators,
+    ...updateUpsellValidator,
+    validate,
+    updateUpsell
+);
+
+router.delete(
+    "/booking/:bookingId/upsell/:upsellId",
+    ...upsellIdValidators,
+    validate,
+    deleteUpsell
+);
 
 export default router;

@@ -1,3 +1,4 @@
+// index.js
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -8,6 +9,7 @@ import serviceRoutes from './src/routes/service.js';
 import supplierRoutes from './src/routes/supplier.js';
 import partsRoutes from './src/routes/parts.js';
 import upSellRoutes from './src/routes/upSell.js';
+import { errorHandlerMiddleware } from "./src/utils/errorHandler.js";
 
 const app = express();
 
@@ -18,7 +20,6 @@ const corsOptions = {
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
 };
-
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions)); // preflight
 
@@ -30,12 +31,13 @@ app.use((req, res, next) => {
     next();
 });
 
-// JSON parser
-app.use(express.json());
+/** Body parsing */
+app.use(express.json()); // Parse JSON bodies
+app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
-// Optional: Trim all string inputs
+/** Optional: Trim all string inputs */
 app.use((req, _res, next) => {
-    if (req.body) {
+    if (req.body && typeof req.body === 'object') {
         for (const key in req.body) {
             if (typeof req.body[key] === 'string') {
                 req.body[key] = req.body[key].trim();
@@ -56,8 +58,11 @@ app.use('/api/service', serviceRoutes);
 app.use('/api/supplier', supplierRoutes);
 app.use('/api/upsell', upSellRoutes);
 
-/** Global error handler */
-app.use((err, req, res, next) => {
+/** Custom error handler */
+app.use(errorHandlerMiddleware);
+
+/** Global fallback error handler */
+app.use((err, req, res, _next) => {
     console.error(err.stack);
     res.status(500).json({ error: 'Something went wrong!', details: err.message });
 });

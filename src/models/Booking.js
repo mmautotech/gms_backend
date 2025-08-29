@@ -1,15 +1,16 @@
+// src/models/Booking.js
 import mongoose from "mongoose";
 
 export const BOOKING_STATUS = {
-    PENDING: "pending",       // Pre-booked
-    ARRIVED: "arrived",       // Vehicle arrived, upsells can be added
-    COMPLETED: "completed",   // Service done
-    CANCELLED: "cancelled",   // Cancelled before completion
+    PENDING: "pending",
+    ARRIVED: "arrived",
+    COMPLETED: "completed",
+    CANCELLED: "cancelled",
 };
 
 const moneyOpts = { type: Number, min: 0, default: 0 };
 
-// --- Upsell Subdocument ---
+// --- Upsell Schema ---
 const upsellSchema = new mongoose.Schema(
     {
         services: [{ type: mongoose.Schema.Types.ObjectId, ref: "Service", required: true }],
@@ -23,25 +24,25 @@ const upsellSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
-// --- Main Booking Schema ---
+// --- Booking Schema ---
 const BookingSchema = new mongoose.Schema(
     {
-        carRegNo: { type: String, required: true, trim: true, index: true },
+        vehicleRegNo: { type: String, required: true, trim: true, index: true },
         makeModel: { type: String, required: true, trim: true },
-        clientName: { type: String, required: true, trim: true },
-        clientAddress: { type: String, trim: true, default: "" },
-        phoneNumber: { type: String, trim: true, default: "" },
-
-        services: [{ type: mongoose.Schema.Types.ObjectId, ref: "Service" }],
-
+        ownerName: { type: String, required: true, trim: true },
+        ownerAddress: { type: String, trim: true, default: "" },
+        ownerNumber: { type: String, trim: true, default: "" },
         scheduledDate: { type: Date, required: true },
+        remarks: { type: String, default: "" },
 
-        // --- Pre-booking / Original values ---
-        originalLabourCost: moneyOpts,
-        originalPartsCost: moneyOpts,
-        originalBookingPrice: moneyOpts,
+        prebookingServices: [{ type: mongoose.Schema.Types.ObjectId, ref: "Service" }],
+        prebookingLabourCost: moneyOpts,
+        prebookingPartsCost: moneyOpts,
+        prebookingBookingPrice: moneyOpts,
 
-        // --- Dynamic / recalculated values ---
+        services: [{ type: mongoose.Schema.Types.ObjectId, ref: "Service", default: [] }],
+        parts: [{ type: mongoose.Schema.Types.ObjectId, ref: "Part", default: [] }],
+
         labourCost: moneyOpts,
         partsCost: moneyOpts,
         bookingPrice: moneyOpts,
@@ -53,13 +54,11 @@ const BookingSchema = new mongoose.Schema(
             index: true,
         },
 
-        arrivedAt: { type: Date },
+        arrivedAt: Date,
         arrivedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-
-        completedAt: { type: Date },
+        completedAt: Date,
         completedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-
-        cancelledAt: { type: Date },
+        cancelledAt: Date,
         cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 
         createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
@@ -67,63 +66,39 @@ const BookingSchema = new mongoose.Schema(
 
         upsells: [upsellSchema],
     },
-    { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
+    {
+        timestamps: true,
+        toJSON: {
+            virtuals: true,
+            versionKey: false,
+            transform(doc, ret) {
+                ret.id = ret._id.toString();
+                delete ret._id;
+
+                // Remove virtuals from response
+                delete ret.totalExpense;
+                delete ret.profit;
+                delete ret.profitPercentage;
+                delete ret.totalServices;
+                delete ret.totalParts;
+
+                return ret;
+            },
+        },
+        toObject: { virtuals: true, versionKey: false },
+    }
 );
 
-// --- Virtuals ---
-BookingSchema.virtual("totalExpense").get(function () {
-    return (this.labourCost || 0) + (this.partsCost || 0);
-});
-
-BookingSchema.virtual("profit").get(function () {
-    return (this.bookingPrice || 0) - this.totalExpense;
-});
-
-BookingSchema.virtual("profitPercentage").get(function () {
-    if (!this.bookingPrice) return 0;
-    return ((this.bookingPrice - this.totalExpense) / this.bookingPrice) * 100;
-});
-
-BookingSchema.virtual("totalServices").get(function () {
-    let base = this.services?.length || 0;
-    let upsellServices = this.upsells?.reduce((acc, u) => acc + (u.services?.length || 0), 0) || 0;
-    return base + upsellServices;
-});
-
-BookingSchema.virtual("totalParts").get(function () {
-    let base = 0; // main booking parts optional
-    let upsellParts = this.upsells?.reduce((acc, u) => acc + (u.parts?.length || 0), 0) || 0;
-    return base + upsellParts;
-});
-
-// --- Pre-save validation: Prevent edits to completed/cancelled ---
-BookingSchema.pre("save", function (next) {
-    if (!this.isNew && [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED].includes(this.status)) {
-        const changed = this.modifiedPaths();
-        const forbidden = [
-            "carRegNo",
-            "makeModel",
-            "clientName",
-            "clientAddress",
-            "phoneNumber",
-            "services",
-            "scheduledDate",
-            "originalBookingPrice",
-            "originalLabourCost",
-            "originalPartsCost",
-            "bookingPrice",
-            "labourCost",
-            "partsCost",
-            "upsells",
-        ];
-        if (changed.some((p) => forbidden.includes(p))) {
-            return next(new Error("Completed or cancelled bookings cannot be edited."));
-        }
+// --- Pre-save validation ---
+BookingSchema.pre("save", function (next, options) {
+    const isFinal = [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED].includes(this.status);
+    if (!this.isNew && isFinal && !options?.allowEdit) {
+        return next(new Error("Completed or cancelled bookings cannot be edited unless explicitly allowed."));
     }
     next();
 });
 
 // --- Indexes ---
-BookingSchema.index({ carRegNo: 1, status: 1 });
+BookingSchema.index({ vehicleRegNo: 1, status: 1 });
 
 export default mongoose.model("Booking", BookingSchema);
