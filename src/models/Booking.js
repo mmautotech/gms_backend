@@ -89,13 +89,20 @@ const BookingSchema = new mongoose.Schema(
     }
 );
 
-// --- Pre-save validation ---
 BookingSchema.pre("save", function (next, options) {
     const isFinal = [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED].includes(this.status);
-    if (!this.isNew && isFinal && !options?.allowEdit) {
-        return next(new Error("Completed or cancelled bookings cannot be edited unless explicitly allowed."));
+    if (!this.isNew && isFinal && this.isModified() && !options?.allowEdit) {
+        // Only block edits if the booking was already final before
+        if (this._originalStatus && [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED].includes(this._originalStatus)) {
+            return next(new Error("Completed or cancelled bookings cannot be edited unless explicitly allowed."));
+        }
     }
     next();
+});
+
+// Save original status on document load
+BookingSchema.pre("init", function (doc) {
+    this._originalStatus = doc.status;
 });
 
 // --- Indexes ---

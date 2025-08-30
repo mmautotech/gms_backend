@@ -31,20 +31,26 @@ export const createBooking = async (req, res) => {
  */
 export const getAllBookings = async (req, res) => {
     try {
-        let { page = 1, limit = 20, sortBy = "createdAt", sortDir = "desc" } = req.query;
+        let { page = 1, limit = 20, sortBy = "createdAt", sortDir = "desc", status, vehicleRegNo, ownerName } = req.query;
 
         page = Number(page);
         limit = Number(limit);
         const skip = (page - 1) * limit;
         const sortOrder = sortDir.toLowerCase() === "asc" ? 1 : -1;
 
+        // --- Build filter object dynamically ---
+        const filter = {};
+        if (status) filter.status = status;
+        if (vehicleRegNo) filter.vehicleRegNo = { $regex: vehicleRegNo, $options: "i" };
+        if (ownerName) filter.ownerName = { $regex: ownerName, $options: "i" };
+
         const [bookings, total] = await Promise.all([
-            Booking.find()
+            Booking.find(filter) // apply filter here
                 .populate(BOOKING_POPULATE)
                 .skip(skip)
                 .limit(limit)
                 .sort({ [sortBy]: sortOrder }),
-            Booking.countDocuments(),
+            Booking.countDocuments(filter), // count filtered documents
         ]);
 
         res.json({
@@ -174,7 +180,8 @@ export const updateBookingStatus = async (req, res) => {
                 break;
         }
 
-        await booking.save();
+        // Pass allowEdit to bypass the pre-save restriction
+        await booking.save({ allowEdit: true });
 
         const populated = await Booking.findById(booking._id).populate(BOOKING_POPULATE);
         res.json({ success: true, booking: populated });
