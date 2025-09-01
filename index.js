@@ -1,4 +1,3 @@
-// index.js
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -9,6 +8,7 @@ import serviceRoutes from './src/routes/service.js';
 import supplierRoutes from './src/routes/supplier.js';
 import partsRoutes from './src/routes/parts.js';
 import upSellRoutes from './src/routes/upSell.js';
+import invoiceRoutes from './src/routes/invoiceRoutes.js'; // Import the invoice routes
 import { errorHandlerMiddleware } from "./src/utils/errorHandler.js";
 
 const app = express();
@@ -57,6 +57,7 @@ app.use('/api/parts', partsRoutes);
 app.use('/api/service', serviceRoutes);
 app.use('/api/supplier', supplierRoutes);
 app.use('/api/upsell', upSellRoutes);
+app.use('/api/invoice', invoiceRoutes); // Add invoice routes
 
 /** Custom error handler */
 app.use(errorHandlerMiddleware);

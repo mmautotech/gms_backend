@@ -1,7 +1,7 @@
 {
   "name": "garage-api",
   "version": "1.0.0",
-  "description": "",
+  "description": "��#\u0000 \u0000g\u0000m\u0000s\u0000_\u0000b\u0000a\u0000c\u0000k\u0000e\u0000n\u0000d\u0000\r\u0000 \u0000",
   "type": "module",
   "main": "index.js",
   "scripts": {
@@ -12,15 +12,27 @@
   "license": "ISC",
   "dependencies": {
     "bcrypt": "^6.0.0",
+    "body-parser": "^2.2.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
+    "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "express-validator": "^7.2.1",
     "joi": "^18.0.1",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.17.1"
+    "mongoose": "^8.17.1",
+    "multer": "^2.0.2",
+    "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mmautotech/gms_backend.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mmautotech/gms_backend/issues"
+  },
+  "homepage": "https://github.com/mmautotech/gms_backend#readme"
 }
