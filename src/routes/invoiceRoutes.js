@@ -1,12 +1,17 @@
+// src/routes/invoiceRoutes.js
 import express from 'express';
-import { createInvoice, generateInvoicePDF } from '../controllers/invoiceController.js';
+import { createInvoiceFromBooking, generateInvoicePDF, updateInvoice } from '../controllers/invoiceController.js';
 
 const router = express.Router();
 
-// Route to create an invoice
-router.post('/create-invoice', createInvoice);
+// Create invoice from booking
+router.post('/from-booking', createInvoiceFromBooking);
 
-// Route to generate PDF for an invoice by its invoice number
-router.get('/generate-invoice/:invoiceNumber', generateInvoicePDF);
+// Generate invoice PDF
+router.get('/pdf/:invoiceNumber', generateInvoicePDF);
+
+// Update invoice details
+router.put('/:invoiceNumber', updateInvoice);
+
 
 export default router;
