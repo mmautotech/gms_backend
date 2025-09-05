@@ -1,234 +1,177 @@
 // controllers/invoiceController.js
 import Invoice from "../models/Invoice.js";
 import Booking from "../models/Booking.js";
-import Service from "../models/Service.js";
-import ExcelJS from "exceljs";
-import PDFDocument from "pdfkit";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// --- Helper: Calculate totals for invoice ---
+const calculateTotals = ({ items = [], vatRate = 0, advanceAmount = 0, amountReceived = 0 }) => {
+  const subTotal = items.reduce((acc, item) => acc + (item.amount || 0), 0);
+  const vatAmount = (subTotal * vatRate) / 100;
+  const totalAmount = subTotal + vatAmount;
+  const netReceivableAmount = totalAmount - advanceAmount - amountReceived;
+  const balance = netReceivableAmount;
+  return { subTotal, vatAmount, totalAmount, netReceivableAmount, balance };
+};
 
-// Path to Excel file
-const excelFilePath = path.join(__dirname, "../data/invoices.xlsx");
-
-/**
- * Generate Invoice from Booking ID
- */
-export const createInvoiceFromBooking = async (req, res) => {
+// --- CREATE Invoice ---
+export const createInvoice = async (req, res) => {
   try {
-    const { bookingId, advanceAmount = 0 } = req.body;
+    const { bookingId, items, advanceAmount = 0, vatRate = 0, amountReceived = 0 } = req.body;
 
-    // Fetch booking
-    const booking = await Booking.findById(bookingId)
-      .populate("prebookingServices")
-      .populate("services");
+    // Check booking exists
+    const booking = await Booking.findById(bookingId);
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
 
-    if (!booking) {
-      return res.status(404).json({ error: "Booking not found" });
+    // Check if invoice already exists for this booking
+    const existingInvoice = await Invoice.findOne({ bookingId });
+    if (existingInvoice) {
+      return res.status(400).json({ message: "Invoice already exists for this booking" });
     }
 
-    // Build items
-    const items = [];
-    let totalAmount = 0;
+    // Calculate price & amount for each item
+    const processedItems = items.map(item => {
+      const price = (item.qty || 0) * (item.rate || 0);
+      const amount = price - (item.discount || 0);
+      return { ...item, price, amount };
+    });
 
-    // Prebooking services
-    if (booking.prebookingServices?.length) {
-      booking.prebookingServices.forEach((service) => {
-        const rate = 100; // TODO: real price
-        const qty = 1;
-        const amount = rate * qty;
-        items.push({ description: service.name, qty, rate, amount });
-        totalAmount += amount;
-      });
+    // Calculate totals
+    const { subTotal, vatAmount, totalAmount, netReceivableAmount, balance } = calculateTotals({
+      items: processedItems,
+      vatRate,
+      advanceAmount,
+      amountReceived,
+    });
+
+    // Generate invoiceNumber
+    const lastInvoice = await Invoice.findOne().sort({ createdAt: -1 });
+    let newInvoiceNumber = "INV-00001";
+    if (lastInvoice?.invoiceNumber) {
+      const lastNumber = parseInt(lastInvoice.invoiceNumber.split("-")[1]);
+      const nextNumber = (lastNumber + 1).toString().padStart(5, "0");
+      newInvoiceNumber = `INV-${nextNumber}`;
     }
-
-    // Extra services
-    if (booking.services?.length) {
-      booking.services.forEach((service) => {
-        const rate = 150; // TODO: real price
-        const qty = 1;
-        const amount = rate * qty;
-        items.push({ description: service.name, qty, rate, amount });
-        totalAmount += amount;
-      });
-    }
-
-    const netReceivableAmount = totalAmount - advanceAmount;
-
-    // ✅ Generate invoice number
-    const count = await Invoice.countDocuments();
-    const invoiceNumber = `INV-${count + 1}`;
 
     // Create invoice
     const invoice = new Invoice({
       bookingId,
-      invoiceNumber,
-      customerName: booking.ownerName,
-      contactNumber: booking.ownerNumber,
-      makeModel: booking.makeModel,
-      vehicleReg: booking.vehicleRegNo,
-      items,
+      invoiceNumber: newInvoiceNumber,
+      items: processedItems,
+      subTotal,
+      vatRate,
+      vatAmount,
       totalAmount,
       advanceAmount,
+      amountReceived,
       netReceivableAmount,
+      balance,
+      createdBy: req.user?._id,
     });
 
     await invoice.save();
 
-    // Append to Excel
-    const workbook = new ExcelJS.Workbook();
-    try {
-      await workbook.xlsx.readFile(excelFilePath);
-    } catch {
-      workbook.addWorksheet("Invoices");
-    }
-    const sheet = workbook.getWorksheet(1);
-
-    if (sheet.rowCount === 0) {
-      sheet.addRow([
-        "Invoice Number",
-        "Customer Name",
-        "Contact Number",
-        "Invoice Date",
-        "Vehicle Reg",
-        "Make & Model",
-        "Item Description",
-        "Qty",
-        "Rate",
-        "Amount",
-        "Total Amount",
-        "Advance Amount",
-        "Net Receivable",
-      ]);
-    }
-
-    items.forEach((item) => {
-      sheet.addRow([
-        invoiceNumber,
-        booking.ownerName,
-        booking.ownerNumber,
-        invoice.invoiceDate.toISOString().split("T")[0],
-        booking.vehicleRegNo,
-        booking.makeModel,
-        item.description,
-        item.qty,
-        item.rate,
-        item.amount,
-        totalAmount,
-        advanceAmount,
-        netReceivableAmount,
-      ]);
-    });
-
-    await workbook.xlsx.writeFile(excelFilePath);
-
-    res.json({
-      success: true,
-      message: "Invoice generated from booking",
+    res.status(201).json({
+      message: "Invoice created successfully",
       invoice,
     });
-  } catch (err) {
-    console.error("❌ Error in createInvoiceFromBooking:", err);
-    res.status(500).json({ error: "Failed to generate invoice from booking" });
+  } catch (error) {
+    console.error("❌ Error creating invoice:", error);
+    res.status(500).json({ message: "Error creating invoice", error: error.message });
   }
 };
 
-// Update invoice by invoiceNumber
+// --- GET Single Invoice by invoiceNumber or MongoId ---
+export const getInvoice = async (req, res) => {
+  try {
+    const { invoiceNumber } = req.params;
+
+    let invoice;
+    const bookingFields = "vehicleRegNo makeModel ownerName ownerAddress ownerNumber createdAt updatedAt completedAt";
+
+    if (invoiceNumber.startsWith("INV-")) {
+      invoice = await Invoice.findOne({ invoiceNumber }).populate({
+        path: "bookingId",
+        select: bookingFields,
+      });
+    } else {
+      invoice = await Invoice.findById(invoiceNumber).populate({
+        path: "bookingId",
+        select: bookingFields,
+      });
+    }
+
+    if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+
+    res.status(200).json(invoice);
+  } catch (error) {
+    console.error("❌ Error fetching invoice:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// --- GET All Invoices (optional filter by bookingId) ---
+export const getInvoices = async (req, res) => {
+  try {
+    const { bookingId } = req.query;
+    const filter = {};
+    if (bookingId) filter.bookingId = bookingId;
+
+    const bookingFields = "vehicleRegNo makeModel ownerName ownerAddress ownerNumber createdAt updatedAt completedAt";
+
+    const invoices = await Invoice.find(filter).populate({
+      path: "bookingId",
+      select: bookingFields,
+    });
+
+    res.status(200).json(invoices);
+  } catch (error) {
+    console.error("❌ Error fetching invoices:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// --- UPDATE Invoice ---
 export const updateInvoice = async (req, res) => {
   try {
-    const { invoiceNumber } = req.params;
-    const updateData = req.body; // e.g., { customerName, items, totalAmount }
+    const { id } = req.params;
+    const { items, vatRate, advanceAmount, amountReceived } = req.body;
 
-    const updatedInvoice = await Invoice.findOneAndUpdate(
-      { invoiceNumber },
-      updateData,
-      { new: true } // returns the updated document
-    );
+    const invoice = await Invoice.findById(id);
+    if (!invoice) return res.status(404).json({ message: "Invoice not found" });
 
-    if (!updatedInvoice) {
-      return res.status(404).json({ message: 'Invoice not found' });
+    // Update items
+    if (items) {
+      invoice.items = items.map(item => {
+        const price = (item.qty || 0) * (item.rate || 0);
+        const amount = price - (item.discount || 0);
+        return { ...item, price, amount };
+      });
     }
 
-    res.json({ message: 'Invoice updated successfully', invoice: updatedInvoice });
+    if (vatRate !== undefined) invoice.vatRate = vatRate;
+    if (advanceAmount !== undefined) invoice.advanceAmount = advanceAmount;
+    if (amountReceived !== undefined) invoice.amountReceived = amountReceived;
+
+    // Recalculate totals
+    const { subTotal, vatAmount, totalAmount, netReceivableAmount, balance } = calculateTotals({
+      items: invoice.items,
+      vatRate: invoice.vatRate,
+      advanceAmount: invoice.advanceAmount,
+      amountReceived: invoice.amountReceived,
+    });
+
+    invoice.subTotal = subTotal;
+    invoice.vatAmount = vatAmount;
+    invoice.totalAmount = totalAmount;
+    invoice.netReceivableAmount = netReceivableAmount;
+    invoice.balance = balance;
+
+    invoice.updatedBy = req.user?._id;
+
+    await invoice.save();
+
+    res.status(200).json(invoice);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-
-
-/**
- * Generate PDF invoice
- */
-export const generateInvoicePDF = async (req, res) => {
-  try {
-    const { invoiceNumber } = req.params;
-
-    const invoice = await Invoice.findOne({ invoiceNumber }).lean();
-    if (!invoice) {
-      return res.status(404).json({ error: "Invoice not found" });
-    }
-
-    const pdfPath = path.join(__dirname, `../data/invoice_${invoiceNumber}.pdf`);
-    const doc = new PDFDocument({ margin: 40, size: "A4" });
-    const stream = fs.createWriteStream(pdfPath);
-    doc.pipe(stream);
-
-    // --- Header ---
-    doc.fontSize(18).font("Helvetica-Bold").text("CUSTOMER INVOICE", { align: "center" });
-    doc.moveDown();
-    doc.fontSize(12).font("Helvetica-Bold").text(`INVOICE # ${invoice.invoiceNumber}`);
-    doc.font("Helvetica").text(`Invoice Date: ${invoice.invoiceDate.toISOString().split("T")[0]}`);
-    doc.moveDown();
-
-    // --- Customer Info ---
-    doc.fontSize(11).text(`Customer Name: ${invoice.customerName}`);
-    doc.text(`Contact #: ${invoice.contactNumber || "_________"}`);
-    doc.text(`Vehicle Reg: ${invoice.vehicleReg || "_________"}`);
-    doc.text(`Make n Model: ${invoice.makeModel || "_________"}`);
-    doc.moveDown();
-
-    // --- Table Header ---
-    const tableTop = doc.y;
-    const descX = 50, qtyX = 300, rateX = 370, amountX = 450;
-
-    doc.font("Helvetica-Bold");
-    doc.text("Description", descX, tableTop);
-    doc.text("Qty", qtyX, tableTop);
-    doc.text("Rate", rateX, tableTop);
-    doc.text("Amount", amountX, tableTop);
-    doc.moveTo(descX, tableTop + 15).lineTo(550, tableTop + 15).stroke();
-
-    // --- Items ---
-    doc.font("Helvetica").fontSize(10);
-    let y = tableTop + 25;
-    invoice.items.forEach((item) => {
-      doc.text(item.description, descX, y);
-      doc.text(item.qty, qtyX, y);
-      doc.text(item.rate, rateX, y);
-      doc.text(item.amount, amountX, y);
-      y += 20;
-    });
-
-    // --- Totals ---
-    y += 20;
-    doc.font("Helvetica-Bold").text(`Advance: ${invoice.advanceAmount}`, descX, y);
-    y += 15;
-    doc.text(`Total: ${invoice.totalAmount}`, descX, y);
-    y += 15;
-    doc.text(`Net Receivable: ${invoice.netReceivableAmount}`, descX, y);
-
-    doc.end();
-
-    stream.on("finish", () => {
-      res.download(pdfPath, `invoice_${invoiceNumber}.pdf`);
-    });
-  } catch (err) {
-    console.error("❌ Error in generateInvoicePDF:", err);
-    res.status(500).json({ error: "Failed to generate invoice PDF" });
+    console.error("❌ Error updating invoice:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
