@@ -1,4 +1,3 @@
-// src/validators/booking.js
 import { body, param, query } from "express-validator";
 import mongoose from "mongoose";
 
@@ -22,7 +21,9 @@ const bookingOptionalFields = [
     body("makeModel").optional().isString(),
     body("ownerName").optional().isString(),
     body("ownerAddress").optional().isString(),
+    body("ownerPostalCode").optional().isString().isLength({ max: 20 }),
     body("ownerNumber").optional().isString(),
+    body("source").optional().isString(),
     body("scheduledDate")
         .optional()
         .isISO8601()
@@ -31,7 +32,7 @@ const bookingOptionalFields = [
             if (value < new Date()) throw new Error("Scheduled date cannot be in the past");
             return true;
         }),
-    body("remarks").optional().isString(),
+    body("remarks").optional().isString().isLength({ max: 500 }),
 ];
 
 // --- Cost-related fields (optional) ---
@@ -65,31 +66,29 @@ export const createBookingValidator = [
 // --- Validators for updating a booking ---
 export const updateBookingValidator = [
     param("id").custom(isObjectId).withMessage("Invalid booking ID"),
+
     body().custom((_, { req }) => {
         const allowedKeys = [
             "vehicleRegNo",
             "makeModel",
             "ownerName",
             "ownerAddress",
+            "ownerPostalCode",
             "ownerNumber",
+            "source",
             "scheduledDate",
             "remarks",
             "prebookingLabourCost",
             "prebookingPartsCost",
             "prebookingBookingPrice",
-            "labourCost",
-            "partsCost",
-            "bookingPrice",
             "prebookingServices",
-            "services",
-            "parts",
-            "upsells",
         ];
 
         const keys = Object.keys(req.body || {});
         if (!keys.some((key) => allowedKeys.includes(key))) {
             throw new Error("At least one valid field is required for update");
         }
+        console.log("DEBUG BODY:", req.body);
         return true;
     }),
     ...bookingOptionalFields,
@@ -119,6 +118,8 @@ export const listBookingValidator = [
     query("status").optional().isIn(["pending", "arrived", "completed", "cancelled"]),
     query("vehicleRegNo").optional().isString(),
     query("ownerName").optional().isString(),
+    query("ownerPostalCode").optional().isString(),
+    query("source").optional().isString(),
     query("sortBy").optional().isString(),
     query("sortDir").optional().isIn(["asc", "desc"]),
 ];

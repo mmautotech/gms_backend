@@ -4,7 +4,6 @@
 export const BOOKING_STATUS = {
     PENDING: "pending",          // initial state when booking created
     ARRIVED: "arrived",          // when customer arrives
-    IN_PROGRESS: "in_progress",  // job started
     COMPLETED: "completed",      // job finished
     CANCELLED: "cancelled",      // booking cancelled
 };
@@ -34,6 +33,7 @@ export const VALIDATION_LIMITS = {
     remarksMaxLength: 500,
     ownerNameMaxLength: 100,
     ownerAddressMaxLength: 250,
+    ownerPostalCodeMaxLength: 20,  // ✅ NEW
 };
 
 // Centralized population config for Booking queries
