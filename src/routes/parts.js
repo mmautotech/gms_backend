@@ -1,4 +1,7 @@
 import express from "express";
+import { requireAuth } from "../middleware/auth.js";
+import { createPartValidator, updatePartValidator } from "../validators/part.js";
+import { validate } from "../middleware/validate.js";
 import {
     createPart,
     getAllParts,
@@ -6,9 +9,6 @@ import {
     updatePart,
     deletePart,
 } from "../controllers/partController.js";
-import { requireAuth } from "../middleware/auth.js";
-import { createPartValidator, updatePartValidator } from "../validators/part.js";
-import { validate } from "../middleware/validate.js";
 
 const router = express.Router();
 router.use(requireAuth); // apply token auth to all routes

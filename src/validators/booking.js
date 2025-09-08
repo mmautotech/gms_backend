@@ -1,125 +1,125 @@
-import { body, param, query } from "express-validator";
-import mongoose from "mongoose";
+import { z } from "zod";
 
-const isObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
+// -----------------------------
+// 🔗 Shared Validators
+// -----------------------------
 
-// --- Required fields for creating a booking ---
-const bookingRequiredFields = [
-    body("vehicleRegNo").notEmpty().withMessage("Vehicle registration is required"),
-    body("makeModel").notEmpty().withMessage("Make and model are required"),
-    body("ownerName").notEmpty().withMessage("Owner name is required"),
-    body("scheduledDate")
-        .notEmpty()
-        .isISO8601()
-        .toDate()
-        .withMessage("Scheduled date must be a valid ISO date"),
-];
+export const objectId = z.string().regex(/^[a-f\d]{24}$/i, "Invalid MongoDB ObjectId");
 
-// --- Optional fields for create/update ---
-const bookingOptionalFields = [
-    body("vehicleRegNo").optional().isString(),
-    body("makeModel").optional().isString(),
-    body("ownerName").optional().isString(),
-    body("ownerAddress").optional().isString(),
-    body("ownerPostalCode").optional().isString().isLength({ max: 20 }),
-    body("ownerNumber").optional().isString(),
-    body("source").optional().isString(),
-    body("scheduledDate")
-        .optional()
-        .isISO8601()
-        .toDate()
-        .custom((value) => {
-            if (value < new Date()) throw new Error("Scheduled date cannot be in the past");
-            return true;
-        }),
-    body("remarks").optional().isString().isLength({ max: 500 }),
-];
+export const futureDateOnly = z
+    .preprocess((val) => {
+        if (!val) return undefined;
+        const d = new Date(val);
+        return isNaN(d) ? undefined : d;
+    }, z.date())
+    .refine((date) => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return date >= today;
+    }, { message: "Scheduled date cannot be in the past" });
 
-// --- Cost-related fields (optional) ---
-const bookingCostFields = [
-    body("prebookingLabourCost").optional().isFloat({ min: 0 }),
-    body("prebookingPartsCost").optional().isFloat({ min: 0 }),
-    body("prebookingBookingPrice").optional().isFloat({ min: 0 }),
-    body("labourCost").optional().isFloat({ min: 0 }),
-    body("partsCost").optional().isFloat({ min: 0 }),
-    body("bookingPrice").optional().isFloat({ min: 0 }),
-];
+// -----------------------------
+// 📦 POST /bookings (create)
+// -----------------------------
 
-// --- Services & Parts arrays ---
-const serviceFields = [
-    body("prebookingServices").optional().isArray(),
-    body("prebookingServices.*").optional().isMongoId(),
-    body("services").optional().isArray(),
-    body("services.*").optional().isMongoId(),
-    body("parts").optional().isArray(),
-    body("parts.*").optional().isMongoId(),
-];
+export const createBookingSchema = z.object({
+    vehicleRegNo: z.string().min(1, "Vehicle registration is required"),
+    makeModel: z.string().min(1, "Make and model are required"),
+    ownerName: z.string().min(1, "Owner name is required"),
+    ownerAddress: z.string().min(1, "Owner address is required"),
+    ownerPostalCode: z.string().min(1).max(20, "Max 20 characters for postal code"),
+    ownerNumber: z.string().min(1, "Owner number is required"),
+    ownerEmail: z.string().email("Invalid email format").max(100, "Email too long"),
+    bookingConfirmationPhoto: z
+        .string()
+        .startsWith("data:image/", "Must be a base64 image"),
 
-// --- Validators for creating a booking ---
-export const createBookingValidator = [
-    ...bookingRequiredFields,
-    ...bookingOptionalFields,
-    ...bookingCostFields,
-    ...serviceFields,
-];
+    prebookingLabourCost: z.number().min(0, "Labour cost must be positive"),
+    prebookingPartsCost: z.number().min(0, "Parts cost must be positive"),
+    prebookingBookingPrice: z.number().min(0, "Booking price must be positive"),
+    prebookingServices: z
+        .array(objectId)
+        .min(1, "At least one prebooking service is required"),
 
-// --- Validators for updating a booking ---
-export const updateBookingValidator = [
-    param("id").custom(isObjectId).withMessage("Invalid booking ID"),
+    scheduledDate: futureDateOnly,
+    source: z.string().min(1, "Source is required"),
+    remarks: z.string().max(500, "Remarks must be under 500 characters").optional(),
+});
 
-    body().custom((_, { req }) => {
-        const allowedKeys = [
-            "vehicleRegNo",
-            "makeModel",
-            "ownerName",
-            "ownerAddress",
-            "ownerPostalCode",
-            "ownerNumber",
-            "source",
-            "scheduledDate",
-            "remarks",
-            "prebookingLabourCost",
-            "prebookingPartsCost",
-            "prebookingBookingPrice",
-            "prebookingServices",
-        ];
+// -----------------------------
+// 📄 GET /bookings (query)
+// -----------------------------
 
-        const keys = Object.keys(req.body || {});
-        if (!keys.some((key) => allowedKeys.includes(key))) {
-            throw new Error("At least one valid field is required for update");
-        }
-        console.log("DEBUG BODY:", req.body);
-        return true;
-    }),
-    ...bookingOptionalFields,
-    ...bookingCostFields,
-    ...serviceFields,
-];
+export const listBookingsQuerySchema = z.object({
+    page: z.coerce.number().min(1).optional(),
+    limit: z.coerce.number().min(1).optional(),
+    status: z.enum(["pending", "arrived", "completed", "cancelled"]).optional(),
+    vehicleRegNo: z.string().optional(),
+    ownerName: z.string().optional(),
+    ownerPostalCode: z.string().optional(),
+    source: z.string().optional(),
+    sortBy: z.enum([
+        "createdAt",
+        "updatedAt",
+        "scheduledDate",
+        "ownerName",
+        "vehicleRegNo",
+        "status",
+    ]).optional(),
+    sortDir: z.enum(["asc", "desc"]).optional(),
+});
 
-// --- Validator for updating booking status ---
-export const updateBookingStatusValidator = [
-    param("id").custom(isObjectId).withMessage("Invalid booking ID"),
-    body("status")
-        .notEmpty()
-        .isIn(["pending", "arrived", "completed", "cancelled"])
-        .withMessage("Invalid status"),
-    body("userId").optional().custom(isObjectId).withMessage("Invalid user ID"),
-];
+// -----------------------------
+// 📄 GET /bookings/:id (params)
+// -----------------------------
 
-// --- Validator for getting a booking by ID ---
-export const getBookingByIdValidator = [
-    param("id").custom(isObjectId).withMessage("Invalid booking ID"),
-];
+export const getBookingByIdParamSchema = z.object({
+    id: objectId,
+});
 
-// --- Validator for listing bookings ---
-export const listBookingValidator = [
-    query("page").optional().isInt({ min: 1 }).toInt(),
-    query("limit").optional().isInt({ min: 1 }).toInt(),
-    query("status").optional().isIn(["pending", "arrived", "completed", "cancelled"]),
-    query("vehicleRegNo").optional().isString(),
-    query("ownerName").optional().isString(),
-    query("ownerPostalCode").optional().isString(),
-    query("source").optional().isString(),
-    query("sortBy").optional().isString(),
-    query("sortDir").optional().isIn(["asc", "desc"]),
-];
+// -----------------------------
+// 🔄 PATCH /bookings/status/:id
+// -----------------------------
+
+export const updateBookingStatusParamSchema = z.object({
+    id: objectId,
+});
+
+export const updateBookingStatusBodySchema = z.object({
+    status: z.enum(["pending", "arrived", "completed", "cancelled"]),
+    userId: objectId.optional(),
+});
+
+// -----------------------------
+// ✏️ PUT /bookings/:id (update)
+// -----------------------------
+
+export const updateBookingParamSchema = z.object({
+    id: objectId,
+});
+
+export const updateBookingBodySchema = z
+    .object({
+        vehicleRegNo: z.string().optional(),
+        makeModel: z.string().optional(),
+        ownerName: z.string().optional(),
+        ownerAddress: z.string().optional(),
+        ownerPostalCode: z.string().max(20).optional(),
+        ownerNumber: z.string().optional(),
+        ownerEmail: z.string().email("Invalid email format").max(100).optional(),
+        bookingConfirmationPhoto: z
+            .string()
+            .startsWith("data:image/", "Must be a base64 image"),
+
+        source: z.string().optional(),
+        scheduledDate: futureDateOnly.optional(),
+        remarks: z.string().max(500).optional(),
+
+        prebookingLabourCost: z.number().min(0).optional(),
+        prebookingPartsCost: z.number().min(0).optional(),
+        prebookingBookingPrice: z.number().min(0).optional(),
+        prebookingServices: z.array(objectId).optional(),
+    })
+    .refine((data) => Object.keys(data).length > 0, {
+        message: "At least one valid field is required for update",
+    });

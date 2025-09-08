@@ -43,5 +43,9 @@ export const BOOKING_POPULATE = [
     { path: "parts", select: "partName partNumber" },
     { path: "upsells.services", select: "name" },
     { path: "upsells.parts", select: "partName partNumber" },
-    { path: "createdBy updatedBy arrivedBy completedBy cancelledBy", select: "name email" },
+    { path: "createdBy", select: "username" },
+    { path: "updatedBy", select: "username" },
+    { path: "arrivedBy", select: "username" },
+    { path: "completedBy", select: "username" },
+    { path: "cancelledBy", select: "username" },
 ];

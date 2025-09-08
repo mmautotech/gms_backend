@@ -1,74 +1,63 @@
 // src/validators/upsell.js
-import { body, param } from "express-validator";
+import { z } from "zod";
 import mongoose from "mongoose";
-import Service from "../models/Service.js";
-import Part from "../models/Part.js";
 
-const isObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
+// Helper: check valid MongoDB ObjectId
+const isValidObjectId = (val) => mongoose.Types.ObjectId.isValid(val);
 
-export const bookingIdValidator = [
-    param("bookingId").custom(isObjectId).withMessage("Invalid booking ID"),
-];
+// Schema: BookingId + UpsellId from route params
+export const bookingIdParamSchema = z.object({
+    bookingId: z.string().refine(isValidObjectId, {
+        message: "Invalid booking ID",
+    }),
+});
 
-export const upsellIdValidators = [
-    param("bookingId").custom(isObjectId).withMessage("Invalid booking ID"),
-    param("upsellId").custom(isObjectId).withMessage("Invalid upsell ID"),
-];
+export const upsellParamsSchema = bookingIdParamSchema.extend({
+    upsellId: z.string().refine(isValidObjectId, {
+        message: "Invalid upsell ID",
+    }),
+});
 
-// --- Create Upsell ---
-export const createUpsellValidator = [
-    body("serviceId")
-        .notEmpty()
-        .withMessage("serviceId is required")
-        .custom(async (value) => {
-            if (!mongoose.Types.ObjectId.isValid(value)) {
-                throw new Error("Invalid serviceId");
-            }
-            const service = await Service.findById(value);
-            if (!service) {
-                throw new Error("Service not found");
-            }
-            return true;
-        }),
+// Schema: Create Upsell Body
+export const createUpsellBodySchema = z.object({
+    serviceId: z
+        .string()
+        .refine(isValidObjectId, { message: "Invalid serviceId" }),
 
-    body("partId")
-        .optional()
-        .custom(async (value) => {
-            if (!mongoose.Types.ObjectId.isValid(value)) {
-                throw new Error("Invalid partId");
-            }
-            const part = await Part.findById(value);
-            if (!part) {
-                throw new Error("Part not found");
-            }
-            return true;
-        }),
+    partId: z
+        .string()
+        .refine(isValidObjectId, { message: "Invalid partId" })
+        .optional(),
 
-    body("partsCost")
-        .notEmpty()
-        .withMessage("partsCost is required")
-        .isFloat({ min: 0 })
-        .withMessage("partsCost must be a positive number"),
+    partsCost: z
+        .number({ invalid_type_error: "partsCost must be a number" })
+        .min(0, "partsCost must be a positive number"),
 
-    body("labourCost")
-        .notEmpty()
-        .withMessage("labourCost is required")
-        .isFloat({ min: 0 })
-        .withMessage("labourCost must be a positive number"),
+    labourCost: z
+        .number({ invalid_type_error: "labourCost must be a number" })
+        .min(0, "labourCost must be a positive number"),
 
-    body("upsellPrice")
-        .notEmpty()
-        .withMessage("upsellPrice is required")
-        .isFloat({ min: 0 })
-        .withMessage("upsellPrice must be a positive number"),
-];
+    upsellPrice: z
+        .number({ invalid_type_error: "upsellPrice must be a number" })
+        .min(0, "upsellPrice must be a positive number"),
 
-// --- Update Upsell ---
-export const updateUpsellValidator = [
-    body("serviceId").optional().custom(isObjectId).withMessage("Invalid serviceId"),
-    body("partId").optional().custom(isObjectId).withMessage("Invalid partId"),
-    body("partPrice").optional().isFloat({ min: 0 }),
-    body("labourPrice").optional().isFloat({ min: 0 }),
-    body("upsellPrice").optional().isFloat({ min: 0 }),
-    body("status").optional().isIn(["pending", "approved", "rejected"]),
-];
+    status: z.enum(["pending", "approved", "rejected"]).optional(),
+});
+
+// Schema: Update Upsell Body (all optional)
+export const updateUpsellBodySchema = z
+    .object({
+        serviceId: z.string().refine(isValidObjectId, {
+            message: "Invalid serviceId",
+        }).optional(),
+
+        partId: z.string().refine(isValidObjectId, {
+            message: "Invalid partId",
+        }).optional(),
+
+        partsCost: z.number().min(0).optional(),
+        labourCost: z.number().min(0).optional(),
+        upsellPrice: z.number().min(0).optional(),
+        status: z.enum(["pending", "approved", "rejected"]).optional(),
+    })
+    .strict(); // prevents unknown keys

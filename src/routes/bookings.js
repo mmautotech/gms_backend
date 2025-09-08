@@ -1,9 +1,15 @@
-// src/routes/booking.js
-
 import express from "express";
 import { requireAuth } from "../middleware/auth.js";
-import { validate } from "../middleware/validate.js";
-
+import { validateWithZod } from "../middleware/zodMiddleware.js";
+import {
+  createBookingSchema,
+  listBookingsQuerySchema,
+  getBookingByIdParamSchema,
+  updateBookingBodySchema,
+  updateBookingParamSchema,
+  updateBookingStatusParamSchema,
+  updateBookingStatusBodySchema,
+} from "../validators/booking.js";
 import {
   createBooking,
   getAllBookings,
@@ -12,18 +18,10 @@ import {
   updateBookingStatus,
 } from "../controllers/bookingController.js";
 
-import {
-  createBookingValidator,
-  updateBookingValidator,
-  updateBookingStatusValidator,
-  listBookingValidator,
-  getBookingByIdValidator,
-} from "../validators/booking.js";
-
 const router = express.Router();
 
 // ---------------------------
-// 🔐 Apply auth to all routes
+// 🔐 Auth required for all booking routes
 // ---------------------------
 router.use(requireAuth);
 
@@ -31,35 +29,32 @@ router.use(requireAuth);
 // 📌 Booking CRUD
 // ---------------------------
 
-// Create a new booking
+// POST /bookings → Create a booking
 router.post(
   "/",
-  ...createBookingValidator,
-  validate,
+  validateWithZod(createBookingSchema),
   createBooking
 );
 
-// List all bookings with filters, pagination, etc.
+// GET /bookings → List bookings with filters
 router.get(
   "/",
-  ...listBookingValidator,
-  validate,
+  validateWithZod(listBookingsQuerySchema, "query"),
   getAllBookings
 );
 
-// Get single booking by ID
+// GET /bookings/:id → Fetch a single booking
 router.get(
   "/:id",
-  ...getBookingByIdValidator,
-  validate,
+  validateWithZod(getBookingByIdParamSchema, "params"),
   getBookingById
 );
 
-// Update booking details (NOT status)
+// PUT /bookings/:id → Update booking fields
 router.put(
   "/:id",
-  ...updateBookingValidator,
-  validate,
+  validateWithZod(updateBookingParamSchema, "params"),
+  validateWithZod(updateBookingBodySchema),
   updateBooking
 );
 
@@ -67,11 +62,11 @@ router.put(
 // 🔄 Booking Status Management
 // ---------------------------
 
-// Update status (PENDING → ARRIVED → COMPLETED or CANCELLED)
+// PATCH /bookings/status/:id → Update status (ARRIVED, COMPLETED, CANCELLED)
 router.patch(
   "/status/:id",
-  ...updateBookingStatusValidator,
-  validate,
+  validateWithZod(updateBookingStatusParamSchema, "params"),
+  validateWithZod(updateBookingStatusBodySchema),
   updateBookingStatus
 );
 

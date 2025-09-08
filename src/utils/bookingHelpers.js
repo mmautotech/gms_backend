@@ -17,20 +17,18 @@ export async function computeTotals(booking) {
     const prebookingLabour = booking.prebookingLabourCost || 0;
     const prebookingParts = booking.prebookingPartsCost || 0;
     const prebookingPrice = booking.prebookingBookingPrice || 0;
+    const prebookingServices = new Set(normalize(booking.prebookingServices));
 
     let totalLabour = prebookingLabour;
     let totalParts = prebookingParts;
-    let upsellsPrice = 0;
-
-    const allServices = new Set(normalize(booking.prebookingServices));
-    const allParts = new Set(normalize(booking.parts));
-
-    normalize(booking.services).forEach((s) => allServices.add(s));
+    let totalBookingPrice = prebookingPrice;
+    let allServices = prebookingServices;
+    let allParts = new Set();
 
     for (const upsell of booking.upsells || []) {
         totalLabour += upsell.labourCost || 0;
         totalParts += upsell.partsCost || 0;
-        upsellsPrice += upsell.upsellPrice || 0;
+        totalBookingPrice += upsell.upsellPrice || 0;
 
         normalize(upsell.services).forEach((s) => allServices.add(s));
         normalize(upsell.parts).forEach((p) => allParts.add(p));
@@ -40,7 +38,7 @@ export async function computeTotals(booking) {
     booking.parts = Array.from(allParts);
     booking.labourCost = totalLabour;
     booking.partsCost = totalParts;
-    booking.bookingPrice = prebookingPrice + upsellsPrice;
+    booking.bookingPrice = totalBookingPrice;
 
     return booking;
 }

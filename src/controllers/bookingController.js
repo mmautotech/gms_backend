@@ -57,7 +57,7 @@ export const createBooking = async (req, res) => {
 };
 
 /**
- * --- Get All Bookings (with Pagination + Filtering) ---
+ * --- Get All Bookings ---
  */
 export const getAllBookings = async (req, res) => {
     try {
@@ -111,7 +111,7 @@ export const getAllBookings = async (req, res) => {
 };
 
 /**
- * --- Get Single Booking by ID ---
+ * --- Get Booking by ID ---
  */
 export const getBookingById = async (req, res) => {
     try {
@@ -132,29 +132,23 @@ export const getBookingById = async (req, res) => {
 };
 
 /**
- * --- Update Booking (General Details) ---
+ * --- Update Booking ---
  */
 export const updateBooking = async (req, res) => {
     try {
         const { id } = req.params;
 
-        console.log("DEBUG BODY2:", req.body);
-        console.log("DEBUG BODY2:", id);
-        // Validate booking ID
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return sendError(res, 400, "Invalid booking ID");
         }
 
-        // Ensure request has a body
         if (!req.body || Object.keys(req.body).length === 0) {
             return sendError(res, 400, "No update fields provided");
         }
 
-        // Find the booking
         let booking = await Booking.findById(id);
         if (!booking) return sendError(res, 404, "Booking not found");
 
-        // Allowed fields to update
         const allowedUpdateFields = [
             "vehicleRegNo",
             "makeModel",
@@ -162,6 +156,8 @@ export const updateBooking = async (req, res) => {
             "ownerAddress",
             "ownerPostalCode",
             "ownerNumber",
+            "ownerEmail",
+            "bookingConfirmationPhoto",
             "source",
             "scheduledDate",
             "remarks",
@@ -171,19 +167,18 @@ export const updateBooking = async (req, res) => {
             "prebookingServices",
         ];
 
-        // Validate services if included
         if (req.body.hasOwnProperty("prebookingServices")) {
             await validateServiceIds(req.body.prebookingServices, "prebookingServices");
         }
 
-        // Apply only allowed fields
         for (const key of allowedUpdateFields) {
             if (req.body.hasOwnProperty(key)) {
                 booking[key] = req.body[key];
             }
         }
 
-        // Recompute totals if cost-related fields changed
+        booking.updatedBy = req.user?._id;
+
         const costFields = [
             "prebookingServices",
             "prebookingLabourCost",
@@ -195,10 +190,8 @@ export const updateBooking = async (req, res) => {
             await computeTotals(booking);
         }
 
-        // Save changes
         await booking.save({ runValidators: true });
 
-        // Send success response
         res.json({
             success: true,
             message: `Booking ${booking._id} updated successfully`,
@@ -221,10 +214,15 @@ export const updateBookingStatus = async (req, res) => {
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return sendError(res, 400, "Invalid booking ID");
         }
-        if (!status) return sendError(res, 400, "New status is required");
+
+        if (!status) {
+            return sendError(res, 400, "New status is required");
+        }
 
         let booking = await Booking.findById(id);
-        if (!booking) return sendError(res, 404, "Booking not found");
+        if (!booking) {
+            return sendError(res, 404, "Booking not found");
+        }
 
         const allowedTransitions = {
             [BOOKING_STATUS.PENDING]: [BOOKING_STATUS.ARRIVED, BOOKING_STATUS.CANCELLED],
@@ -237,29 +235,34 @@ export const updateBookingStatus = async (req, res) => {
             return sendError(res, 400, `Invalid status transition: ${booking.status} → ${status}`);
         }
 
-        booking.status = status;
-        booking.updatedBy = req.user?._id;
-
+        const userId = req.user?._id;
+        const userName = req.user?.username || "Unknown user";
         const now = new Date();
+
+        booking.status = status;
+        booking.updatedBy = userId;
+
         switch (status) {
             case BOOKING_STATUS.ARRIVED:
                 booking.arrivedAt = now;
-                booking.arrivedBy = req.user?._id;
+                booking.arrivedBy = userId;
                 break;
             case BOOKING_STATUS.COMPLETED:
                 booking.completedAt = now;
-                booking.completedBy = req.user?._id;
+                booking.completedBy = userId;
                 break;
             case BOOKING_STATUS.CANCELLED:
                 booking.cancelledAt = now;
-                booking.cancelledBy = req.user?._id;
+                booking.cancelledBy = userId;
                 break;
         }
 
         await booking.save({ allowEdit: true });
 
-        const populated = await Booking.findById(booking._id).populate(BOOKING_POPULATE);
-        res.json({ success: true, booking: populated });
+        return res.json({
+            success: true,
+            message: `Marked as ${status} by ${userName}`,
+        });
     } catch (error) {
         console.error("Update Booking Status Error:", error);
         sendError(res, 500, error.message);

@@ -1,62 +1,44 @@
 // src/routes/upsell.js
 import express from "express";
+import { requireAuth } from "../middleware/auth.js";
+import { validateWithZod } from "../middleware/zodMiddleware.js";
+import {
+    bookingIdParamSchema,
+    upsellParamsSchema,
+    createUpsellBodySchema,
+    updateUpsellBodySchema,
+} from "../validators/upsell.js";
 import {
     createUpsell,
-    getUpsellsByBooking,
-    getUpsellById,
-    updateUpsell,
-    deleteUpsell,
+    getSellsByBooking,
 } from "../controllers/upsellController.js";
-import { requireAuth } from "../middleware/auth.js";
-import {
-    createUpsellValidator,
-    updateUpsellValidator,
-    upsellIdValidators,
-    bookingIdValidator,
-} from "../validators/upsell.js";
-import { validate } from "../middleware/validate.js";
+
 
 const router = express.Router();
 
-// 🔒 Require authentication for all routes
+// 🔒 Require authentication for all upsell routes
 router.use(requireAuth);
 
-// 📌 Upsell Routes
+// --- Create Upsell ---
 router.post(
     "/booking/:bookingId",
-    bookingIdValidator,
-    ...createUpsellValidator,
-    validate,
+    validateWithZod(bookingIdParamSchema, "params"),
+    validateWithZod(createUpsellBodySchema, "body"),
     createUpsell
 );
 
+// --- Get All Sells for a Booking ---
 router.get(
     "/booking/:bookingId",
-    bookingIdValidator,
-    validate,
-    getUpsellsByBooking
+    validateWithZod(bookingIdParamSchema, "params"),
+    getSellsByBooking
 );
 
-router.get(
-    "/booking/:bookingId/upsell/:upsellId",
-    ...upsellIdValidators,
-    validate,
-    getUpsellById
-);
-
+// --- Update Upsell ---
 router.put(
     "/booking/:bookingId/upsell/:upsellId",
-    ...upsellIdValidators,
-    ...updateUpsellValidator,
-    validate,
-    updateUpsell
-);
-
-router.delete(
-    "/booking/:bookingId/upsell/:upsellId",
-    ...upsellIdValidators,
-    validate,
-    deleteUpsell
+    validateWithZod(upsellParamsSchema, "params"),
+    validateWithZod(updateUpsellBodySchema, "body"),
 );
 
 export default router;

@@ -32,16 +32,22 @@ const BookingSchema = new mongoose.Schema(
         ownerAddress: {
             type: String,
             trim: true,
-            default: "",
+            required: true,
             maxlength: VALIDATION_LIMITS.ownerAddressMaxLength,
         },
         ownerPostalCode: {
             type: String,
             trim: true,
-            default: "",
+            required: true,
             maxlength: VALIDATION_LIMITS.ownerPostalCodeMaxLength,
         },
-        ownerNumber: { type: String, trim: true, default: "" },
+        ownerEmail: {
+            type: String,
+            trim: true,
+            lowercase: true,
+            required: true
+        },
+        ownerNumber: { type: String, trim: true, required: true },
         scheduledDate: { type: Date, required: true },
         remarks: {
             type: String,
@@ -51,9 +57,14 @@ const BookingSchema = new mongoose.Schema(
         },
 
         prebookingServices: [{ type: ObjectId, ref: "Service", default: [] }],
-        prebookingLabourCost: moneyOpts,
-        prebookingPartsCost: moneyOpts,
-        prebookingBookingPrice: moneyOpts,
+        prebookingLabourCost: { ...moneyOpts, required: true },
+        prebookingPartsCost: { ...moneyOpts, required: true },
+        prebookingBookingPrice: { ...moneyOpts, required: true },
+        bookingConfirmationPhoto: {
+            type: String, // store URL or filename
+            trim: true,
+            default: ""
+        },
 
         services: [{ type: ObjectId, ref: "Service", default: [] }],
         parts: [{ type: ObjectId, ref: "Part", default: [] }],
@@ -76,12 +87,12 @@ const BookingSchema = new mongoose.Schema(
         cancelledAt: Date,
         cancelledBy: { type: ObjectId, ref: "User" },
 
-        createdBy: { type: ObjectId, ref: "User" },
+        createdBy: { type: ObjectId, ref: "User", required: true },
         updatedBy: { type: ObjectId, ref: "User" },
 
         upsells: { type: [upsellSchema], default: [] },
 
-        source: { type: String, trim: true, default: "" },
+        source: { type: String, trim: true, required: true },
     },
     {
         timestamps: true,
@@ -92,7 +103,7 @@ const BookingSchema = new mongoose.Schema(
                 ret.id = ret._id.toString();
                 delete ret._id;
 
-                // Remove computed virtuals from output
+                // Clean up virtuals if they exist
                 delete ret.totalExpense;
                 delete ret.profit;
                 delete ret.profitPercentage;
