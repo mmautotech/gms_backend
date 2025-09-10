@@ -1,177 +1,122 @@
-// controllers/invoiceController.js
 import Invoice from "../models/Invoice.js";
 import Booking from "../models/Booking.js";
+import Service from "../models/Service.js";
 
-// --- Helper: Calculate totals for invoice ---
-const calculateTotals = ({ items = [], vatRate = 0, advanceAmount = 0, amountReceived = 0 }) => {
-  const subTotal = items.reduce((acc, item) => acc + (item.amount || 0), 0);
-  const vatAmount = (subTotal * vatRate) / 100;
-  const totalAmount = subTotal + vatAmount;
-  const netReceivableAmount = totalAmount - advanceAmount - amountReceived;
-  const balance = netReceivableAmount;
-  return { subTotal, vatAmount, totalAmount, netReceivableAmount, balance };
+// ✅ Safe Auto invoice number generator
+const generateInvoiceNo = async () => {
+  const lastInvoice = await Invoice.findOne().sort({ createdAt: -1 });
+  if (!lastInvoice || !lastInvoice.invoiceNo) return "INV-0001";
+
+  let lastNo = 0;
+  if (lastInvoice.invoiceNo.includes("-")) {
+    const parts = lastInvoice.invoiceNo.split("-");
+    lastNo = parseInt(parts[1], 10) || 0;
+  } else {
+    lastNo = parseInt(lastInvoice.invoiceNo, 10) || 0;
+  }
+
+  const nextNo = (lastNo + 1).toString().padStart(4, "0");
+  return `INV-${nextNo}`;
 };
 
-// --- CREATE Invoice ---
+// -----------------------------
+// 🧾 Create or Update Invoice from Booking
+// -----------------------------
 export const createInvoice = async (req, res) => {
   try {
-    const { bookingId, items, advanceAmount = 0, vatRate = 0, amountReceived = 0 } = req.body;
+    const { bookingId, createdBy, clientName, phone, email, services } = req.body;
 
-    // Check booking exists
-    const booking = await Booking.findById(bookingId);
+    // 1️⃣ Fetch booking
+    const booking = await Booking.findById(bookingId)
+      .populate("services", "name")
+      .populate("upsells.services", "name")
+      .lean();
+
     if (!booking) return res.status(404).json({ message: "Booking not found" });
 
-    // Check if invoice already exists for this booking
-    const existingInvoice = await Invoice.findOne({ bookingId });
-    if (existingInvoice) {
-      return res.status(400).json({ message: "Invoice already exists for this booking" });
+    // 2️⃣ Generate invoice number
+    const invoiceNo = await generateInvoiceNo();
+
+    // 3️⃣ Build items
+    let items = [];
+    if (services && services.length) {
+      // Use updated services from frontend
+      items = services.map((s) => ({
+        description: s.name,
+        amount: s.rate || 0,
+      }));
+    } else if (booking.services?.length) {
+      // Fallback to booking services
+      items.push(
+        ...booking.services.map((s) => ({
+          description: s.name,
+          amount: booking.bookingPrice || 0,
+        }))
+      );
     }
 
-    // Calculate price & amount for each item
-    const processedItems = items.map(item => {
-      const price = (item.qty || 0) * (item.rate || 0);
-      const amount = price - (item.discount || 0);
-      return { ...item, price, amount };
-    });
-
-    // Calculate totals
-    const { subTotal, vatAmount, totalAmount, netReceivableAmount, balance } = calculateTotals({
-      items: processedItems,
-      vatRate,
-      advanceAmount,
-      amountReceived,
-    });
-
-    // Generate invoiceNumber
-    const lastInvoice = await Invoice.findOne().sort({ createdAt: -1 });
-    let newInvoiceNumber = "INV-00001";
-    if (lastInvoice?.invoiceNumber) {
-      const lastNumber = parseInt(lastInvoice.invoiceNumber.split("-")[1]);
-      const nextNumber = (lastNumber + 1).toString().padStart(5, "0");
-      newInvoiceNumber = `INV-${nextNumber}`;
+    if (booking.upsells?.length) {
+      booking.upsells.forEach((u) => {
+        u.services?.forEach((s) => {
+          items.push({
+            description: `Upsell - ${s.name}`,
+            amount: u.upsellPrice || 0,
+          });
+        });
+      });
     }
 
-    // Create invoice
-    const invoice = new Invoice({
-      bookingId,
-      invoiceNumber: newInvoiceNumber,
-      items: processedItems,
-      subTotal,
-      vatRate,
-      vatAmount,
-      totalAmount,
-      advanceAmount,
-      amountReceived,
-      netReceivableAmount,
-      balance,
-      createdBy: req.user?._id,
-    });
+    // 4️⃣ Calculate total
+    const totalAmount = items.reduce((sum, i) => sum + i.amount, 0);
 
-    await invoice.save();
+    // 5️⃣ Check if invoice already exists
+    let invoice = await Invoice.findOne({ booking: bookingId });
+    if (invoice) {
+      // Update existing invoice
+      invoice.invoiceNo = invoiceNo; // optionally keep the same invoice number
+      invoice.customerName = clientName || booking.ownerName;
+      invoice.contactNo = phone || booking.ownerNumber;
+      invoice.email = email || booking.ownerEmail || "";
+      invoice.items = items;
+      invoice.totalAmount = totalAmount;
+      invoice.makeModel = booking.makeModel;
+      invoice.vehicleRegNo = booking.vehicleRegNo;
+      invoice.createdBy = createdBy || booking.createdBy;
+      await invoice.save();
+    } else {
+      // Create new invoice
+      invoice = await Invoice.create({
+        booking: booking._id,
+        invoiceNo,
+        customerName: clientName || booking.ownerName,
+        contactNo: phone || booking.ownerNumber,
+        email: email || booking.ownerEmail || "",
+        invoiceDate: new Date(),
+        makeModel: booking.makeModel,
+        vehicleRegNo: booking.vehicleRegNo,
+        items,
+        totalAmount,
+        createdBy: createdBy || booking.createdBy,
+      });
+    }
 
-    res.status(201).json({
-      message: "Invoice created successfully",
-      invoice,
-    });
-  } catch (error) {
-    console.error("❌ Error creating invoice:", error);
-    res.status(500).json({ message: "Error creating invoice", error: error.message });
+    res.status(201).json(invoice);
+  } catch (err) {
+    res.status(500).json({ message: "Error creating/updating invoice", error: err.message });
   }
 };
 
-// --- GET Single Invoice by invoiceNumber or MongoId ---
 export const getInvoice = async (req, res) => {
   try {
-    const { invoiceNumber } = req.params;
+    const { bookingId } = req.params;
+    if (!bookingId) return res.status(400).json({ message: "Booking ID is required" });
 
-    let invoice;
-    const bookingFields = "vehicleRegNo makeModel ownerName ownerAddress ownerNumber createdAt updatedAt completedAt";
-
-    if (invoiceNumber.startsWith("INV-")) {
-      invoice = await Invoice.findOne({ invoiceNumber }).populate({
-        path: "bookingId",
-        select: bookingFields,
-      });
-    } else {
-      invoice = await Invoice.findById(invoiceNumber).populate({
-        path: "bookingId",
-        select: bookingFields,
-      });
-    }
-
-    if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+    const invoice = await Invoice.findOne({ booking: bookingId }).lean();
+    if (!invoice) return res.status(404).json({ message: "Invoice not found for this booking" });
 
     res.status(200).json(invoice);
-  } catch (error) {
-    console.error("❌ Error fetching invoice:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-};
-
-// --- GET All Invoices (optional filter by bookingId) ---
-export const getInvoices = async (req, res) => {
-  try {
-    const { bookingId } = req.query;
-    const filter = {};
-    if (bookingId) filter.bookingId = bookingId;
-
-    const bookingFields = "vehicleRegNo makeModel ownerName ownerAddress ownerNumber createdAt updatedAt completedAt";
-
-    const invoices = await Invoice.find(filter).populate({
-      path: "bookingId",
-      select: bookingFields,
-    });
-
-    res.status(200).json(invoices);
-  } catch (error) {
-    console.error("❌ Error fetching invoices:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-};
-
-// --- UPDATE Invoice ---
-export const updateInvoice = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { items, vatRate, advanceAmount, amountReceived } = req.body;
-
-    const invoice = await Invoice.findById(id);
-    if (!invoice) return res.status(404).json({ message: "Invoice not found" });
-
-    // Update items
-    if (items) {
-      invoice.items = items.map(item => {
-        const price = (item.qty || 0) * (item.rate || 0);
-        const amount = price - (item.discount || 0);
-        return { ...item, price, amount };
-      });
-    }
-
-    if (vatRate !== undefined) invoice.vatRate = vatRate;
-    if (advanceAmount !== undefined) invoice.advanceAmount = advanceAmount;
-    if (amountReceived !== undefined) invoice.amountReceived = amountReceived;
-
-    // Recalculate totals
-    const { subTotal, vatAmount, totalAmount, netReceivableAmount, balance } = calculateTotals({
-      items: invoice.items,
-      vatRate: invoice.vatRate,
-      advanceAmount: invoice.advanceAmount,
-      amountReceived: invoice.amountReceived,
-    });
-
-    invoice.subTotal = subTotal;
-    invoice.vatAmount = vatAmount;
-    invoice.totalAmount = totalAmount;
-    invoice.netReceivableAmount = netReceivableAmount;
-    invoice.balance = balance;
-
-    invoice.updatedBy = req.user?._id;
-
-    await invoice.save();
-
-    res.status(200).json(invoice);
-  } catch (error) {
-    console.error("❌ Error updating invoice:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+  } catch (err) {
+    console.error("Get invoice error:", err);
+    res.status(500).json({ message: "Error fetching invoice", error: err.message });
   }
 };

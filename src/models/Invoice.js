@@ -1,70 +1,60 @@
 // models/Invoice.js
 import mongoose from "mongoose";
 
-const invoiceItemSchema = new mongoose.Schema({
-  serviceId: { type: mongoose.Schema.Types.ObjectId, ref: "Service", required: true },
-  description: { type: String },
-  qty: { type: Number, required: true, min: 1 },
-  rate: { type: Number, required: true, min: 0 },
-  price: { type: Number, required: true, min: 0 }, // qty * rate
-  discount: { type: Number, default: 0, min: 0 },
-  amount: { type: Number, required: true, min: 0 }, // price - discount
-});
+const { ObjectId } = mongoose.Schema.Types;
 
-const invoiceSchema = new mongoose.Schema(
+const moneyOpts = { type: Number, min: 0, default: 0 };
+
+// --- Invoice Item Schema ---
+const invoiceItemSchema = new mongoose.Schema(
   {
-    bookingId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Booking",
-      required: true,
-      unique: true, // ✅ one invoice per booking
-    },
-
-    invoiceNumber: { type: String, unique: true }, // ✅ will auto-generate
-    invoiceDate: { type: Date, default: Date.now },
-
-    items: [invoiceItemSchema],
-
-    totalAmount: { type: Number, required: true }, // sum of item.price
-    totalDiscount: { type: Number, default: 0 }, // sum of discounts
-    subTotal: { type: Number, required: true }, // totalAmount - totalDiscount
-
-    vatRate: { type: Number, default: 0 }, // % (e.g. 20)
-    vatAmount: { type: Number, default: 0 }, // calculated
-
-    netReceivableAmount: { type: Number, required: true }, // subTotal + vatAmount
-    advanceAmount: { type: Number, default: 0 },
-    amountReceived: { type: Number, default: 0 },
-    balance: { type: Number, default: 0 },
-
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    description: { type: String, required: true, trim: true },
+    amount: { ...moneyOpts, required: true },
   },
-  { timestamps: true }
+  { _id: false }
 );
 
-// --- Auto-generate Invoice Number ---
-invoiceSchema.pre("validate", async function (next) {
-  if (!this.invoiceNumber) {
-    const count = await mongoose.model("Invoice").countDocuments();
-    this.invoiceNumber = `INV-${String(count + 1).padStart(5, "0")}`;
+// --- Invoice Schema ---
+const InvoiceSchema = new mongoose.Schema(
+  {
+    invoiceNo: { type: String, required: true, unique: true }, // e.g. "INV-20250910-001"
+    booking: { type: ObjectId, ref: "Booking", required: true },
+
+    // Customer snapshot (denormalized from Booking)
+    customerName: { type: String, required: true },
+    contactNo: { type: String, required: true },
+    vehicleRegNo: { type: String, required: true },
+    makeModel: { type: String, required: true },
+
+    invoiceDate: { type: Date, default: Date.now },
+
+    // Line items (services, upsells, parts, etc.)
+    items: { type: [invoiceItemSchema], default: [] },
+
+    // Total
+    totalAmount: { ...moneyOpts, required: true },
+
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: false // optional now
+    }
+
+  },
+  {
+    timestamps: true,
+    toJSON: {
+      virtuals: true,
+      versionKey: false,
+      transform(doc, ret) {
+        ret.id = ret._id.toString();
+        delete ret._id;
+        return ret;
+      },
+    },
+    toObject: { virtuals: true, versionKey: false },
   }
-  next();
-});
+);
 
-// --- Auto-calculate VAT + totals ---
-invoiceSchema.pre("save", function (next) {
-  this.totalAmount = this.items.reduce((sum, item) => sum + item.price, 0);
-  this.totalDiscount = this.items.reduce((sum, item) => sum + item.discount, 0);
-  this.subTotal = this.totalAmount - this.totalDiscount;
-
-  this.vatAmount = (this.subTotal * this.vatRate) / 100;
-  this.netReceivableAmount = this.subTotal + this.vatAmount;
-
-  this.balance = this.netReceivableAmount - (this.advanceAmount + this.amountReceived);
-
-  next();
-});
-
-const Invoice = mongoose.model("Invoice", invoiceSchema);
+const Invoice = mongoose.model("Invoice", InvoiceSchema);
 export default Invoice;

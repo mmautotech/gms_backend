@@ -62,7 +62,7 @@ app.use('/api/parts', partsRoutes);
 app.use('/api/service', serviceRoutes);
 app.use('/api/supplier', supplierRoutes);
 app.use('/api/upsell', upSellRoutes);
-app.use('/api/invoice', invoiceRoutes);
+app.use('/api/invoices', invoiceRoutes);
 
 /** ❗ Custom error handler */
 app.use(errorHandlerMiddleware);
