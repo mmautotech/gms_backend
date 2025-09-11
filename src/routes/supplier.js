@@ -1,4 +1,7 @@
 import express from "express";
+import { requireAuth } from "../middleware/auth.js";
+import { validate } from "../middleware/validate.js";
+import { createSupplierValidator, updateSupplierValidator } from "../validators/supplier.js";
 import {
   createSupplier,
   getAllSuppliers,
@@ -6,17 +9,14 @@ import {
   updateSupplier,
   deleteSupplier,
 } from "../controllers/supplierController.js";
-import { requireAuth } from "../middleware/auth.js";
-import { createSupplierValidator, updateSupplierValidator } from "../validators/supplier.js";
-import { validate } from "../middleware/validate.js";
 
 const router = express.Router();
 router.use(requireAuth);
 
-router.post("/", ...createSupplierValidator, validate, createSupplier);
+router.post("/", validate, ...createSupplierValidator, createSupplier);
 router.get("/", getAllSuppliers);
 router.get("/:id", getSupplierById);
-router.put("/:id", ...updateSupplierValidator, validate, updateSupplier);
+router.put("/:id", validate, ...updateSupplierValidator, updateSupplier);
 router.delete("/:id", deleteSupplier);
 
 export default router;

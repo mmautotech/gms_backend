@@ -1,13 +1,20 @@
 // src/routes/invoiceRoutes.js
 import express from "express";
-import { createInvoice, getInvoice } from "../controllers/invoiceController.js";
+import {
+    getInvoice,
+    getAllInvoices,
+    updateInvoice
+} from "../controllers/invoiceController.js";
 
 const router = express.Router();
 
-// 🧾 Create invoice from booking
-router.post("/", createInvoice);
+// 🧾 Get all invoices
+router.get("/", getAllInvoices);
 
-// 🧾 Get invoice by booking ID
+// 🧾 Get (or create) invoice by booking ID
 router.get("/:bookingId", getInvoice);
+
+// 🧾 Update invoice by invoice ID
+router.put("/:invoiceId", updateInvoice);
 
 export default router;

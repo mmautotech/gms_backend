@@ -31,15 +31,23 @@ const InvoiceSchema = new mongoose.Schema(
     // Line items (services, upsells, parts, etc.)
     items: { type: [invoiceItemSchema], default: [] },
 
-    // Total
+    // Totals
     totalAmount: { ...moneyOpts, required: true },
+
+    // ✅ New fields
+    discountAmount: { type: Number, min: 0, default: 0 },
+    vatIncluded: { type: Boolean, default: false },
+    status: {
+      type: String,
+      enum: ["Unpaid", "Partial", "Paid"],
+      default: "Unpaid",
+    },
 
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: false // optional now
-    }
-
+      required: false, // optional now
+    },
   },
   {
     timestamps: true,
