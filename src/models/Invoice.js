@@ -23,6 +23,7 @@ const InvoiceSchema = new mongoose.Schema(
     // Customer snapshot (denormalized from Booking)
     customerName: { type: String, required: true },
     contactNo: { type: String, required: true },
+    postalCode: { type: String, required: true },
     vehicleRegNo: { type: String, required: true },
     makeModel: { type: String, required: true },
 
