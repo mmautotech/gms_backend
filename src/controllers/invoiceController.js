@@ -176,6 +176,10 @@ import PDFDocument from "pdfkit";
 export const downloadInvoicePdf = async (req, res) => {
   try {
     const { invoiceId } = req.params;
+
+    // NEW: Read 'proforma' flag from query, default to false
+    const isProforma = req.query.proforma === "true"; // string comparison
+
     const invoice = await Invoice.findById(invoiceId).lean();
 
     if (!invoice) {
@@ -197,15 +201,17 @@ export const downloadInvoicePdf = async (req, res) => {
     doc.font("Helvetica").fontSize(10).text("67 Bideford Ave, Perivale, Greenford UB6 7PP, United Kingdom", { align: "center" });
     doc.text("Phone: +44 7907 070780", { align: "center" });
 
-    // VAT number (only if vat included)
     if (invoice.vatIncluded) {
       doc.text("VAT No: 488627727", { align: "center" });
     }
 
     doc.moveDown(1);
 
-    // ---------- Invoice Title ----------
-    doc.font("Helvetica-Bold").fontSize(12).text("CUSTOMER INVOICE", { align: "center" });
+    // 🔁 Replace static label based on isProforma
+    doc.font("Helvetica-Bold").fontSize(12).text(
+      isProforma ? "PROFORMA INVOICE" : "CUSTOMER INVOICE",
+      { align: "center" }
+    );
     doc.moveDown(0.5);
 
     // ---------- Customer & Vehicle Info Table ----------
@@ -231,23 +237,20 @@ export const downloadInvoicePdf = async (req, res) => {
     // Row 2
     drawCell("Customer Name", startX, y, 130, rowH, "left", true);
     drawCell(invoice.customerName || "—", startX + 130, y, 130, rowH);
-    drawCell("Postal Code", startX + 260, y, 130, rowH, "left", true);
-    drawCell(invoice.postalCode || "—", startX + 390, y, 170, rowH);
+    drawCell("Contact #", startX + 260, y, 130, rowH, "left", true);
+    drawCell(invoice.contactNo || "—", startX + 390, y, 170, rowH);
     y += rowH;
-
-    // Row 3
+    // Row 2
+    // leave other 2 cells empty
+    drawCell("Vehicle Reg", startX, y, 130, rowH, "left", true);
+    drawCell(invoice.vehicleRegNo || "-", startX + 130, y, 130, rowH);
     drawCell("Make & Model", startX + 260, y, 130, rowH, "left", true);
     drawCell(invoice.makeModel || "—", startX + 390, y, 170, rowH);
-    drawCell("Contact #", startX, y, 130, rowH, "left", true);
-    drawCell(invoice.contactNo || "—", startX + 130, y, 130, rowH);
     y += rowH;
 
     // Row 4 → Payment Status
-    // leave other 2 cells empty
-    drawCell("Vehicle Reg", startX + 260, y, 130, rowH, "left", true);
-    drawCell(invoice.vehicleRegNo || "—", startX + 390, y, 170, rowH);
-    drawCell("Status", startX, y, 130, rowH, "left", true);
-    drawCell(invoice.status || "Unpaid", startX + 130, y, 130, rowH);
+    drawCell("Postal Code", startX + 260, y, 130, rowH, "left", true);
+    drawCell(invoice.postalCode || "—", startX + 390, y, 170, rowH);
     y += rowH + 10;
 
     // ---------- Items Table ----------
@@ -261,7 +264,7 @@ export const downloadInvoicePdf = async (req, res) => {
     for (let i = 0; i < Math.max(items.length, MIN_ROWS); i++) {
       const item = items[i] || {};
       drawCell(item.description || "", startX, y, 300, rowH);
-      drawCell(item.quantity != null ? String(item.quantity) : "1", startX + 300, y, 100, rowH, "center");
+      drawCell(item.description != null ? "1" : "", startX + 300, y, 100, rowH, "center");
       drawCell(item.amount != null ? `£${Number(item.amount).toFixed(2)}` : "", startX + 400, y, 160, rowH, "right");
       y += rowH;
     }
