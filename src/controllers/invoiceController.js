@@ -1,5 +1,11 @@
 import Invoice from "../models/Invoice.js";
 import Booking from "../models/Booking.js";
+import PDFDocument from "pdfkit";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // ✅ Safe Auto invoice number generator
 const generateInvoiceNo = async () => {
@@ -171,8 +177,6 @@ export const updateInvoice = async (req, res) => {
 // -----------------------------
 // 🧾 Download Invoice as PDF (with Status + VAT logic)
 // -----------------------------
-import PDFDocument from "pdfkit";
-
 export const downloadInvoicePdf = async (req, res) => {
   try {
     const { invoiceId } = req.params;
@@ -195,6 +199,16 @@ export const downloadInvoicePdf = async (req, res) => {
 
     const doc = new PDFDocument({ margin: 40 });
     doc.pipe(res);
+
+    // ✅ Add logo as background watermark
+    const logoPath = path.join(__dirname, "../public/logo.png"); // adjust path if needed
+    doc.opacity(0.1)
+      .image(logoPath, doc.page.width / 2 - 150, doc.page.height / 2 - 150, {
+        width: 300,
+        align: "center",
+        valign: "center"
+      })
+      .opacity(1);
 
     // ---------- Header ----------
     doc.font("Helvetica-Bold").fontSize(14).text("PERIVALE MOTOR SERVICES 1", { align: "center" });
@@ -240,8 +254,8 @@ export const downloadInvoicePdf = async (req, res) => {
     drawCell("Contact #", startX + 260, y, 130, rowH, "left", true);
     drawCell(invoice.contactNo || "—", startX + 390, y, 170, rowH);
     y += rowH;
-    // Row 2
-    // leave other 2 cells empty
+
+    // Row 3
     drawCell("Vehicle Reg", startX, y, 130, rowH, "left", true);
     drawCell(invoice.vehicleRegNo || "-", startX + 130, y, 130, rowH);
     drawCell("Make & Model", startX + 260, y, 130, rowH, "left", true);
@@ -295,6 +309,7 @@ export const downloadInvoicePdf = async (req, res) => {
     y += rowH + 20;
 
     // ---------- Footer ----------
+    y += 80;
     doc.font("Helvetica").fontSize(8);
     doc.text("We are responsible for job done (above-mentioned) only. Please contact our customer service number in case of any issue relevant to job done.", startX, y, { width: tableWidth, align: "justify" });
     doc.moveDown(0.5);

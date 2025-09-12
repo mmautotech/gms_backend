@@ -71,6 +71,9 @@ export const getAllBookings = async (req, res) => {
             ownerName,
             ownerPostalCode,
             source,
+            make,
+            model,
+            phoneNumber,
         } = req.query;
 
         page = Number(page);
@@ -84,6 +87,9 @@ export const getAllBookings = async (req, res) => {
         if (ownerName) filter.ownerName = { $regex: ownerName, $options: "i" };
         if (ownerPostalCode) filter.ownerPostalCode = { $regex: ownerPostalCode, $options: "i" };
         if (source) filter.source = { $regex: source, $options: "i" };
+        if (make) filter.make = { $regex: make, $options: "i" };
+        if (model) filter.model = { $regex: model, $options: "i" };
+        if (phoneNumber) filter.phoneNumber = { $regex: phoneNumber, $options: "i" };
 
         const [bookings, total] = await Promise.all([
             Booking.find(filter)
