@@ -11,6 +11,7 @@ import partsRoutes from './src/routes/parts.js';
 import upSellRoutes from './src/routes/upSell.js';
 import invoiceRoutes from './src/routes/invoiceRoutes.js';
 import { errorHandlerMiddleware } from "./src/utils/errorHandler.js";
+import dashoardRoutes from "./src/routes/dashboardRoutes.js"
 
 const app = express();
 
@@ -64,6 +65,7 @@ app.use('/api/service', serviceRoutes);
 app.use('/api/suppliers', supplierRoutes); // ✅ pluralized
 app.use('/api/upsell', upSellRoutes);
 app.use('/api/invoices', invoiceRoutes);
+app.use('/api/dashboard', dashoardRoutes);
 
 /** ❗ Custom error handler */
 app.use(errorHandlerMiddleware);
