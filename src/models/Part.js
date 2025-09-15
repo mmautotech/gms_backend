@@ -3,36 +3,53 @@ import mongoose from "mongoose";
 
 const PartSchema = new mongoose.Schema(
     {
-        partName: {
+        sku: {
             type: String,
-            required: true,
+            required: [true, "SKU is required"],
+            unique: true,
             trim: true,
         },
-        partNumber: {
+        name: {
+            type: String,
+            required: [true, "Part name is required"],
+            trim: true,
+        },
+        category: {
             type: String,
             default: null,
             trim: true,
         },
-        createdBy: {
+        currentStock: {
+            type: Number,
+            default: 0,
+            min: [0, "Stock cannot be negative"],
+        },
+        minStock: {
+            type: Number,
+            default: 0,
+        },
+        maxStock: {
+            type: Number,
+            default: 0,
+        },
+        unitPrice: {
+            type: Number,
+            default: 0,
+        },
+        supplier: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "User",
-            required: true,
+            ref: "Supplier",
+            required: [true, "Supplier is required"],
+        },
+        lastRestocked: {
+            type: Date,
+            default: null,
         },
     },
     { timestamps: true }
 );
 
-// Uniqueness logic:
-//  - If partNumber is null → unique partName
-//  - If partNumber is not null → unique combination of partName + partNumber
-PartSchema.index(
-    { partName: 1, partNumber: 1 },
-    { unique: true, partialFilterExpression: { partNumber: { $exists: true } } }
-);
-PartSchema.index(
-    { partName: 1 },
-    { unique: true, partialFilterExpression: { partNumber: null } }
-);
+PartSchema.index({ name: "text", sku: "text", category: "text" });
 
 const Part = mongoose.model("Part", PartSchema);
 export default Part;

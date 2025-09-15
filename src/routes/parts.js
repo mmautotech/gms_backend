@@ -1,22 +1,21 @@
+// routes/partsRoutes.js
 import express from "express";
-import { requireAuth } from "../middleware/auth.js";
-import { createPartValidator, updatePartValidator } from "../validators/part.js";
-import { validate } from "../middleware/validate.js";
 import {
     createPart,
-    getAllParts,
+    getParts,
     getPartById,
     updatePart,
     deletePart,
+    restockPart,
 } from "../controllers/partController.js";
 
 const router = express.Router();
-router.use(requireAuth); // apply token auth to all routes
 
-router.post("/", ...createPartValidator, validate, createPart);
-router.get("/", getAllParts);
+router.post("/", createPart);
+router.get("/", getParts);
 router.get("/:id", getPartById);
-router.put("/:id", ...updatePartValidator, validate, updatePart);
+router.put("/:id", updatePart);
 router.delete("/:id", deletePart);
+router.patch("/:id/restock", restockPart);
 
 export default router;

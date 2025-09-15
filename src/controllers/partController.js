@@ -1,101 +1,100 @@
-// controllers/partController.js
+// controllers/partsController.js
 import Part from "../models/Part.js";
+import Supplier from "../models/Supplier.js";
 
-/**
- * Create a new part
- */
+// ✅ Create part
 export const createPart = async (req, res) => {
     try {
-        const { partName, partNumber } = req.body;
-        if (!partName) return res.status(400).json({ error: "Part name is required" });
+        const { supplier } = req.body;
+        const supplierExists = await Supplier.findById(supplier);
 
-        const part = new Part({
-            partName: partName.trim(),
-            partNumber: partNumber?.trim() || null,
-            createdBy: req.user.id, // from auth middleware
-        });
+        if (!supplierExists) {
+            return res.status(400).json({ message: "Supplier not found" });
+        }
 
-        await part.save();
+        const part = await Part.create(req.body);
         res.status(201).json(part);
     } catch (error) {
-        if (error.code === 11000) {
-            return res.status(400).json({
-                error: "Duplicate part entry",
-                message: "Part with same name or same name+number already exists"
-            });
-        }
-        res.status(500).json({ error: "Error creating part", details: error.message });
+        res.status(500).json({ message: error.message });
     }
 };
 
-/**
- * Get all parts
- */
-export const getAllParts = async (_req, res) => {
+// ✅ Get all parts
+export const getParts = async (req, res) => {
     try {
-        const parts = await Part.find()
-            .populate("createdBy", "username userType") // show who created
-            .sort({ createdAt: -1 });
+        const { q } = req.query;
+        const filter = q ? { $text: { $search: q } } : {};
+
+        const parts = await Part.find(filter)
+            .populate("supplier", "name contact email")
+            .lean();
+
         res.json(parts);
     } catch (error) {
-        res.status(500).json({ error: "Error fetching parts", details: error.message });
+        res.status(500).json({ message: error.message });
     }
 };
 
-/**
- * Get part by ID
- */
+// ✅ Get part by ID
 export const getPartById = async (req, res) => {
     try {
-        const { id } = req.params;
-        const part = await Part.findById(id).populate("createdBy", "username userType");
+        const part = await Part.findById(req.params.id)
+            .populate("supplier", "name contact email")
+            .lean();
 
-        if (!part) return res.status(404).json({ error: "Part not found" });
+        if (!part) return res.status(404).json({ message: "Part not found" });
 
         res.json(part);
     } catch (error) {
-        res.status(500).json({ error: "Error fetching part", details: error.message });
+        res.status(500).json({ message: error.message });
     }
 };
 
-/**
- * Update a part
- */
+// ✅ Update part
 export const updatePart = async (req, res) => {
     try {
-        const { id } = req.params;
-        const { partName, partNumber } = req.body;
+        const part = await Part.findByIdAndUpdate(req.params.id, req.body, {
+            new: true,
+            runValidators: true,
+        }).lean();
 
-        const part = await Part.findById(id);
-        if (!part) return res.status(404).json({ error: "Part not found" });
+        if (!part) return res.status(404).json({ message: "Part not found" });
 
-        if (partName !== undefined) part.partName = partName.trim();
-        if (partNumber !== undefined) part.partNumber = partNumber?.trim() || null;
-
-        await part.save();
         res.json(part);
     } catch (error) {
-        if (error.code === 11000) {
-            return res.status(400).json({
-                error: "Duplicate part entry",
-                message: "Part with same name or same name+number already exists"
-            });
-        }
-        res.status(500).json({ error: "Error updating part", details: error.message });
+        res.status(500).json({ message: error.message });
     }
 };
 
-/**
- * Delete a part
- */
+// ✅ Delete part
 export const deletePart = async (req, res) => {
     try {
-        const { id } = req.params;
-        const part = await Part.findByIdAndDelete(id);
-        if (!part) return res.status(404).json({ error: "Part not found" });
-
-        res.json({ message: "Part deleted successfully" });
+        const part = await Part.findByIdAndDelete(req.params.id);
+        if (!part) return res.status(404).json({ message: "Part not found" });
+        res.status(204).end();
     } catch (error) {
-        res.status(500).json({ error: "Error deleting part", details: error.message });
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// ✅ Restock part
+export const restockPart = async (req, res) => {
+    try {
+        const { quantity } = req.body;
+
+        const part = await Part.findByIdAndUpdate(
+            req.params.id,
+            {
+                $inc: { currentStock: Number(quantity) },
+                lastRestocked: new Date(),
+            },
+            { new: true }
+        ).lean();
+
+        if (!part) return res.status(404).json({ message: "Part not found" });
+
+        res.json(part);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
 };

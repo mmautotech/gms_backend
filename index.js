@@ -2,13 +2,14 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
+
 import authRoutes from './src/routes/auth.js';
 import bookingRoutes from './src/routes/bookings.js';
 import serviceRoutes from './src/routes/service.js';
 import supplierRoutes from './src/routes/supplier.js';
 import partsRoutes from './src/routes/parts.js';
 import upSellRoutes from './src/routes/upSell.js';
-import invoiceRoutes from './src/routes/invoiceRoutes.js'; // Import the invoice routes
+import invoiceRoutes from './src/routes/invoiceRoutes.js';
 import { errorHandlerMiddleware } from "./src/utils/errorHandler.js";
 
 const app = express();
@@ -60,7 +61,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/parts', partsRoutes);
 app.use('/api/service', serviceRoutes);
-app.use('/api/supplier', supplierRoutes);
+app.use('/api/suppliers', supplierRoutes); // ✅ pluralized
 app.use('/api/upsell', upSellRoutes);
 app.use('/api/invoices', invoiceRoutes);
 
