@@ -1,50 +1,44 @@
-import { body, param } from "express-validator";
+import { z } from "zod";
+import mongoose from "mongoose";
 
-export const createSupplierValidator = [
-    body("name")
-        .notEmpty().withMessage("Supplier name is required")
-        .isString().withMessage("Supplier name must be a string")
-        .trim(),
-    body("contact")
-        .notEmpty().withMessage("Contact is required")
-        .isString().withMessage("Contact must be a string")
-        .trim(),
-    body("bankAccount")
-        .notEmpty().withMessage("Bank account is required")
-        .isString().withMessage("Bank account must be a string")
-        .trim(),
-    body("email")
-        .optional()
-        .isEmail().withMessage("Invalid email format")
-        .trim()
-        .normalizeEmail(),
-    body("address")
-        .optional()
-        .isString().withMessage("Address must be a string")
-        .trim(),
-];
+// Helper: check valid MongoDB ObjectId
+const isValidObjectId = (val) => mongoose.Types.ObjectId.isValid(val);
 
-export const updateSupplierValidator = [
-    param("id").isMongoId().withMessage("Invalid supplier ID"),
-    body("name")
+// Supplier ID param schema
+export const supplierIdParamSchema = z.object({
+    id: z.string().refine(isValidObjectId, {
+        message: "Invalid supplier ID",
+    }),
+});
+
+// Create supplier schema
+export const createSupplierBodySchema = z
+    .object({
+        name: z.string().min(1, "Supplier name is required"),
+        contact: z.string().min(1, "Contact is required"),
+        bankAccount: z.string().min(1, "Bank account is required"),
+        address: z.string().optional(),
+        email: z.string().email("Invalid email format").optional(),
+        // ⛔ isActive excluded → system controlled
+    })
+    .strict();
+
+// Update supplier schema (all optional)
+export const updateSupplierBodySchema = z
+    .object({
+        name: z.string().min(1).optional(),
+        contact: z.string().min(1).optional(),
+        bankAccount: z.string().min(1).optional(),
+        address: z.string().optional(),
+        email: z.string().email("Invalid email format").optional(),
+        // ⛔ isActive excluded
+    })
+    .strict();
+
+// ✅ Query schema for fetching suppliers
+export const supplierQuerySchema = z.object({
+    includeInactive: z
+        .string()
         .optional()
-        .isString().withMessage("Supplier name must be a string")
-        .trim(),
-    body("contact")
-        .optional()
-        .isString().withMessage("Contact must be a string")
-        .trim(),
-    body("bankAccount")
-        .optional()
-        .isString().withMessage("Bank account must be a string")
-        .trim(),
-    body("email")
-        .optional()
-        .isEmail().withMessage("Invalid email format")
-        .trim()
-        .normalizeEmail(),
-    body("address")
-        .optional()
-        .isString().withMessage("Address must be a string")
-        .trim(),
-];
+        .transform((val) => val === "true"),
+});

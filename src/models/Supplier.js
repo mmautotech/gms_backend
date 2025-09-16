@@ -28,13 +28,17 @@ const SupplierSchema = new mongoose.Schema(
             default: null,
             trim: true,
             lowercase: true,
-            match: [/.+@.+\..+/, "Please enter a valid email address"], // optional email validation
+            match: [/.+@.+\..+/, "Please enter a valid email address"],
+        },
+        isActive: {
+            type: Boolean,
+            default: true,
         },
     },
     { timestamps: true }
 );
 
-// Optional: Ensure unique supplier names
+// Ensure unique supplier names
 SupplierSchema.index({ name: 1 }, { unique: true });
 
 const Supplier = mongoose.model("Supplier", SupplierSchema);
