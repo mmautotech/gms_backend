@@ -62,7 +62,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/parts', partsRoutes);
 app.use('/api/service', serviceRoutes);
-app.use('/api/suppliers', supplierRoutes); // ✅ pluralized
+app.use('/api/suppliers', supplierRoutes);
 app.use('/api/upsell', upSellRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/dashboard', dashoardRoutes);

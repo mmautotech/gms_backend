@@ -3,53 +3,51 @@ import mongoose from "mongoose";
 
 const PartSchema = new mongoose.Schema(
     {
-        sku: {
-            type: String,
-            required: [true, "SKU is required"],
-            unique: true,
-            trim: true,
-        },
-        name: {
+        partName: {
             type: String,
             required: [true, "Part name is required"],
             trim: true,
         },
-        category: {
+        partNumber: {
             type: String,
-            default: null,
+            default: null, // allow missing/nullable
             trim: true,
         },
-        currentStock: {
+        price: {
             type: Number,
-            default: 0,
-            min: [0, "Stock cannot be negative"],
-        },
-        minStock: {
-            type: Number,
-            default: 0,
-        },
-        maxStock: {
-            type: Number,
-            default: 0,
-        },
-        unitPrice: {
-            type: Number,
-            default: 0,
+            required: [true, "Price is required"],
+            min: [0, "Price cannot be negative"],
+            set: (v) => Number(v.toFixed(2)), // enforce 2 decimal places
         },
         supplier: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Supplier",
-            required: [true, "Supplier is required"],
+            required: [true, "Supplier reference is required"],
         },
-        lastRestocked: {
-            type: Date,
+        description: {
+            type: String,
             default: null,
+            trim: true,
+        },
+        isActive: {
+            type: Boolean,
+            default: true,
+            index: true,
         },
     },
     { timestamps: true }
 );
 
-PartSchema.index({ name: "text", sku: "text", category: "text" });
+// ✅ Compound unique index for (partName + partNumber)
+// Ensures only one combination can exist
+PartSchema.index({ partName: 1, partNumber: 1 }, { unique: true });
+
+// Text index for search
+PartSchema.index({
+    partName: "text",
+    partNumber: "text",
+    description: "text",
+});
 
 const Part = mongoose.model("Part", PartSchema);
 export default Part;

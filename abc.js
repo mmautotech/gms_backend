@@ -7,7 +7,7 @@ console.log(hash);
 
 
 db.users.insertOne({
-    username: "admin",
+    username: "ali",
     passwordHash: "$2b$10$tfPi3ilflUQ6AyVUPH7.oeq0/YNaXJjhM6sVb7S7jmkdwyDM2FdXW", // your generated hash
-    userType: "admin"
+    userType: "user"
 });

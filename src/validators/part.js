@@ -1,24 +1,59 @@
-import { body, param } from "express-validator";
+// validators/part.js
+import { z } from "zod";
+import mongoose from "mongoose";
 
-export const createPartValidator = [
-    body("partName")
-        .notEmpty().withMessage("Part name is required")
-        .isString().withMessage("Part name must be a string")
-        .trim(),
-    body("partNumber")
-        .optional()
-        .isString().withMessage("Part number must be a string")
-        .trim(),
-];
+const isValidObjectId = (val) => mongoose.Types.ObjectId.isValid(val);
 
-export const updatePartValidator = [
-    param("id").isMongoId().withMessage("Invalid part ID"),
-    body("partName")
+// ✅ ID param
+export const partIdParamSchema = z.object({
+    id: z
+        .string()
+        .refine((val) => isValidObjectId(val), { message: "Invalid part ID" }),
+});
+
+// ✅ Create schema
+export const createPartBodySchema = z
+    .object({
+        partName: z.string().min(1, "Part name is required").trim(),
+
+        partNumber: z.preprocess(
+            (val) => (val === "" ? null : val),
+            z.string().trim().nullable().optional()
+        ),
+
+        price: z.preprocess(
+            (val) => (typeof val === "string" ? Number(val) : val),
+            z
+                .number({ required_error: "Price is required" })
+                .min(0, "Price cannot be negative")
+                .refine((val) => /^\d+(\.\d{1,2})?$/.test(val.toString()), {
+                    message: "Price can have up to two decimal places",
+                })
+        ),
+
+        supplier: z.string().refine((val) => isValidObjectId(val), {
+            message: "Invalid supplier ID",
+        }),
+
+        description: z.preprocess(
+            (val) => (typeof val === "string" ? val.trim() : val),
+            z.string().optional().nullable()
+        ),
+    })
+    .strict();
+
+// ✅ Update schema (all optional)
+export const updatePartBodySchema = createPartBodySchema.partial().strict();
+
+// ✅ Query schema
+export const partQuerySchema = z.object({
+    q: z.string().optional(),
+    includeInactive: z
+        .string()
         .optional()
-        .isString().withMessage("Part name must be a string")
-        .trim(),
-    body("partNumber")
+        .transform((val) => val === "true"),
+    onlyInactive: z
+        .string()
         .optional()
-        .isString().withMessage("Part number must be a string")
-        .trim(),
-];
+        .transform((val) => val === "true"),
+});
