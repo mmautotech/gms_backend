@@ -1,7 +1,6 @@
 import { z } from "zod";
 import mongoose from "mongoose";
 
-// Helper: check valid MongoDB ObjectId
 const isValidObjectId = (val) => mongoose.Types.ObjectId.isValid(val);
 
 // Supplier ID param schema
@@ -19,11 +18,10 @@ export const createSupplierBodySchema = z
         bankAccount: z.string().min(1, "Bank account is required"),
         address: z.string().optional(),
         email: z.string().email("Invalid email format").optional(),
-        // ⛔ isActive excluded → system controlled
     })
     .strict();
 
-// Update supplier schema (all optional)
+// Update supplier schema
 export const updateSupplierBodySchema = z
     .object({
         name: z.string().min(1).optional(),
@@ -31,11 +29,10 @@ export const updateSupplierBodySchema = z
         bankAccount: z.string().min(1).optional(),
         address: z.string().optional(),
         email: z.string().email("Invalid email format").optional(),
-        // ⛔ isActive excluded
     })
     .strict();
 
-// ✅ Query schema for fetching suppliers
+// Query schema
 export const supplierQuerySchema = z.object({
     includeInactive: z
         .string()

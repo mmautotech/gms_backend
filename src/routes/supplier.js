@@ -1,20 +1,15 @@
 import express from "express";
 import { requireAuth, requireRole } from "../middleware/auth.js";
-import { validateWithZod } from "../middleware/zodMiddleware.js";
+import { validateWithZod } from "../middleware/zodMiddlewaree.js";
+
 import {
   supplierIdParamSchema,
   createSupplierBodySchema,
   updateSupplierBodySchema,
   supplierQuerySchema,
 } from "../validators/supplier.js";
-import {
-  createSupplier,
-  getSuppliers,
-  getSupplierById,
-  updateSupplier,
-  deleteSupplier,
-  restoreSupplier,
-} from "../controllers/supplierController.js";
+
+import * as supplierController from "../controllers/supplierController.js";
 
 const router = express.Router();
 
@@ -22,24 +17,15 @@ const router = express.Router();
 router.use(requireAuth);
 
 // --- Public (authenticated users) ---
-router.get(
-  "/",
-  validateWithZod(supplierQuerySchema, "query"),
-  getSuppliers
-);
-
-router.get(
-  "/:id",
-  validateWithZod(supplierIdParamSchema, "params"),
-  getSupplierById
-);
+router.get("/", validateWithZod(supplierQuerySchema, "query"), supplierController.getSuppliers);
+router.get("/:id", validateWithZod(supplierIdParamSchema, "params"), supplierController.getSupplierById);
 
 // --- Admin-only routes ---
 router.post(
   "/",
   requireRole("admin"),
   validateWithZod(createSupplierBodySchema, "body"),
-  createSupplier
+  supplierController.createSupplier
 );
 
 router.put(
@@ -47,21 +33,21 @@ router.put(
   requireRole("admin"),
   validateWithZod(supplierIdParamSchema, "params"),
   validateWithZod(updateSupplierBodySchema, "body"),
-  updateSupplier
+  supplierController.updateSupplier
 );
 
 router.delete(
   "/:id",
   requireRole("admin"),
   validateWithZod(supplierIdParamSchema, "params"),
-  deleteSupplier
+  supplierController.deleteSupplier
 );
 
 router.patch(
   "/:id/restore",
   requireRole("admin"),
   validateWithZod(supplierIdParamSchema, "params"),
-  restoreSupplier
+  supplierController.restoreSupplier
 );
 
 export default router;

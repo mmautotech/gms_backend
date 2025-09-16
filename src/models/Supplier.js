@@ -1,4 +1,3 @@
-// models/Supplier.js
 import mongoose from "mongoose";
 
 const SupplierSchema = new mongoose.Schema(
@@ -7,6 +6,7 @@ const SupplierSchema = new mongoose.Schema(
             type: String,
             required: [true, "Supplier name is required"],
             trim: true,
+            unique: true,
         },
         contact: {
             type: String,
@@ -33,12 +33,13 @@ const SupplierSchema = new mongoose.Schema(
         isActive: {
             type: Boolean,
             default: true,
+            index: true,
         },
     },
     { timestamps: true }
 );
 
-// Ensure unique supplier names
+// Unique index on supplier name
 SupplierSchema.index({ name: 1 }, { unique: true });
 
 const Supplier = mongoose.model("Supplier", SupplierSchema);

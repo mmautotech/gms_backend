@@ -1,7 +1,7 @@
 // routes/partsRoutes.js
 import express from "express";
 import { requireAuth, requireRole } from "../middleware/auth.js";
-import { validateWithZod } from "../middleware/zodMiddleware.js";
+import { validateWithZod } from "../middleware/zodMiddlewaree.js";
 
 import {
     partIdParamSchema,
