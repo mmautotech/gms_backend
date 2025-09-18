@@ -24,6 +24,24 @@ const generateInvoiceNo = async () => {
   return `INV-${nextNo}`;
 };
 
+
+// -----------------------------
+// 🧾 Get Invoice Stats (Total / Paid / Unpaid)
+// -----------------------------
+export const getInvoiceStats = async (req, res) => {
+  try {
+    const total = await Invoice.countDocuments();
+    const paid = await Invoice.countDocuments({ status: "Paid" });
+    const unpaid = await Invoice.countDocuments({ status: "Unpaid" });
+
+    res.status(200).json({ total, paid, unpaid });
+  } catch (err) {
+    console.error("Error fetching invoice stats:", err);
+    res.status(500).json({ message: "Failed to get invoice stats", error: err.message });
+  }
+};
+
+
 // -----------------------------
 // 🧾 Get or Create Invoice by Booking ID
 // -----------------------------
@@ -110,13 +128,36 @@ export const getInvoiceByBooking = async (req, res) => {
 // -----------------------------
 export const getAllInvoices = async (req, res) => {
   try {
-    const invoices = await Invoice.find().sort({ createdAt: -1 }).lean();
-    res.status(200).json(invoices);
+    const page = parseInt(req.query.page, 10) || 1;       // current page
+    const limit = parseInt(req.query.limit, 10) || 20;    // items per page
+    const skip = (page - 1) * limit;
+
+    // total invoices count
+    const totalInvoices = await Invoice.countDocuments();
+
+    // fetch paginated invoices
+    const invoices = await Invoice.find()
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    res.status(200).json({
+      data: invoices,
+      pagination: {
+        total: totalInvoices,
+        page,
+        limit,
+        totalPages: Math.ceil(totalInvoices / limit),
+      },
+    });
   } catch (err) {
-    console.error("Error fetching all invoices:", err);
+    console.error("Error fetching invoices:", err);
     res.status(500).json({ message: "Failed to get invoices", error: err.message });
   }
 };
+
+
 
 // -----------------------------
 // 🧾 Update Invoice

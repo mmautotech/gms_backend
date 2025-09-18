@@ -219,6 +219,8 @@ export const deletePurchaseInvoice = async (req, res) => {
  * ✅ Download Purchase Invoice PDF
  * Query: ?proforma=true → PROFORMA INVOICE
  */
+
+
 export const downloadPurchaseInvoicePdf = async (req, res) => {
     try {
         const { id } = req.params;
@@ -230,17 +232,20 @@ export const downloadPurchaseInvoicePdf = async (req, res) => {
             .populate("purchaser", "username userType")
             .lean();
 
-        if (!invoice) return res.status(404).json({ success: false, error: "Invoice not found" });
+        if (!invoice) {
+            return res.status(404).json({ success: false, error: "Invoice not found" });
+        }
 
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename=${invoice.invoiceNo || "invoice"}.pdf`);
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename=${invoice.invoiceNo || invoice.vendorInvoiceNumber || "invoice"}.pdf`
+        );
 
         const doc = new PDFDocument({ margin: 40 });
         doc.pipe(res);
 
-        const logoPath = path.join(process.cwd(), "public/logo.png");
-        doc.opacity(0.1).image(logoPath, doc.page.width / 2 - 150, doc.page.height / 2 - 150, { width: 300 }).opacity(1);
-
+        // Header
         doc.font("Helvetica-Bold").fontSize(14).text("PERIVALE MOTOR SERVICES 1", { align: "center" });
         doc.font("Helvetica").fontSize(10)
             .text("67 Bideford Ave, Perivale, Greenford UB6 7PP, United Kingdom", { align: "center" })
@@ -256,14 +261,13 @@ export const downloadPurchaseInvoicePdf = async (req, res) => {
 
         const drawCell = (text, x, y, w, h, align = "left", bold = false) => {
             doc.rect(x, y, w, h).stroke();
-            doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(10).text(text, x + 4, y + 6, { width: w - 8, align });
+            doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(10).text(text || "", x + 4, y + 6, { width: w - 8, align });
         };
 
-        // Invoice info rows
         drawCell("INVOICE #", startX, y, 130, rowH, "left", true);
-        drawCell(invoice.invoiceNo || "—", startX + 130, y, 130, rowH);
+        drawCell(invoice.invoiceNo || invoice.vendorInvoiceNumber || "—", startX + 130, y, 130, rowH);
         drawCell("Invoice Date", startX + 260, y, 130, rowH, "left", true);
-        drawCell(invoice.createdAt ? new Date(invoice.createdAt).toLocaleDateString("en-GB") : "—", startX + 390, y, 170, rowH);
+        drawCell(invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString("en-GB") : "—", startX + 390, y, 170, rowH);
         y += rowH;
 
         drawCell("Supplier", startX, y, 130, rowH, true);
@@ -272,14 +276,14 @@ export const downloadPurchaseInvoicePdf = async (req, res) => {
         drawCell(invoice.supplier?.contact || "—", startX + 390, y, 170, rowH);
         y += rowH + 10;
 
-        // Items table header
+        // Items table
+        const items = Array.isArray(invoice.items) ? invoice.items : [];
+        const MIN_ROWS = 5;
         drawCell("Description", startX, y, 300, rowH, "left", true);
         drawCell("Qty", startX + 300, y, 100, rowH, "center", true);
         drawCell("Amount", startX + 400, y, 160, rowH, "right", true);
         y += rowH;
 
-        const items = invoice.items || [];
-        const MIN_ROWS = 5;
         for (let i = 0; i < Math.max(items.length, MIN_ROWS); i++) {
             const item = items[i] || {};
             drawCell(item.part?.partName || "", startX, y, 300, rowH);
@@ -323,8 +327,13 @@ export const downloadPurchaseInvoicePdf = async (req, res) => {
             .text("Authorized Signature: ___________________", { align: "left" });
 
         doc.end();
+
     } catch (err) {
-        console.error("Error generating purchase invoice PDF:", err);
-        res.status(500).json({ success: false, error: err.message });
+        console.error("Error generating PDF:", err);
+        const doc = new PDFDocument();
+        res.setHeader("Content-Type", "application/pdf");
+        doc.pipe(res);
+        doc.text("Failed to generate invoice PDF. Please try again later.");
+        doc.end();
     }
 };

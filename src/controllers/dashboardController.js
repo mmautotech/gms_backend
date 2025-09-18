@@ -29,7 +29,6 @@ export const getDashboardStats = async (req, res) => {
 
         /** -------------------------------
          * Service Trends
-         * Count bookings per service by name
          -------------------------------- */
         const serviceTrendsData = await Booking.aggregate([
             { $unwind: "$prebookingServices" }, // explode array
@@ -55,11 +54,33 @@ export const getDashboardStats = async (req, res) => {
         );
 
         /** -------------------------------
+         * Booking Stats (Dynamic)
+         -------------------------------- */
+        // Aggregate bookings by status
+        const bookingStatusData = await Booking.aggregate([
+            {
+                $group: {
+                    _id: "$status",
+                    count: { $sum: 1 },
+                },
+            },
+        ]);
+
+        // Prepare bookings object
+        const bookings = {
+            total: await Booking.countDocuments(),
+        };
+        bookingStatusData.forEach(b => {
+            bookings[b._id] = b.count;
+        });
+
+        /** -------------------------------
          * Response
          -------------------------------- */
         res.json({
             monthlyRevenue,
             serviceTrends: serviceTrendsWithNames,
+            bookings,
         });
     } catch (err) {
         console.error("Dashboard Stats Error:", err);

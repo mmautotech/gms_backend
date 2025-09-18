@@ -66,4 +66,13 @@ router.delete(
     purchaseController.deletePurchaseInvoice
 );
 
+
+// --- Download Purchase Invoice PDF ---
+router.get(
+    "/:id/download",
+    validateWithZod(invoiceIdParamSchema, "params"),
+    purchaseController.downloadPurchaseInvoicePdf
+);
+
+
 export default router;

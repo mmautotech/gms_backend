@@ -1,26 +1,27 @@
-// src/routes/invoiceRoutes.js
 import express from "express";
 import {
     getInvoiceByBooking,
     getAllInvoices,
     updateInvoice,
-    downloadInvoicePdf
+    downloadInvoicePdf,
+    getInvoiceStats
 } from "../controllers/invoiceController.js";
-
 
 const router = express.Router();
 
-// 🧾 Get all invoices
+// ✅ Invoice stats
+router.get("/stats", getInvoiceStats);
+
+// ✅ Get all invoices (supports pagination via query ?page=1&limit=20)
 router.get("/", getAllInvoices);
 
-// 🧾 Download invoice as PDF (specific route first)
+// ✅ Download invoice PDF (specific route must be before dynamic :invoiceId)
 router.get("/:invoiceId/pdf", downloadInvoicePdf);
 
-// 🧾 Update invoice by invoice ID
+// ✅ Update invoice by ID
 router.put("/:invoiceId", updateInvoice);
 
-// 🧾 Get (or create) invoice by booking ID
-router.get("/:bookingId", getInvoiceByBooking);
-
+// ✅ Get (or create) invoice by booking ID
+router.get("/booking/:bookingId", getInvoiceByBooking);
 
 export default router;
