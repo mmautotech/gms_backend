@@ -18,7 +18,6 @@ const validateServiceIds = async (serviceIds = [], context = "services") => {
         throw new Error(`Invalid ${context} ID(s): ${invalid.join(", ")}`);
     }
 };
-
 /**
  * --- Create Booking ---
  */
@@ -48,7 +47,8 @@ export const createBooking = async (req, res) => {
 
         res.status(201).json({
             success: true,
-            message: "Booking Created Successfully"
+            message: "Booking created successfully",
+            booking, // 👈 return booking
         });
     } catch (error) {
         console.error("Create Booking Error:", error);
@@ -56,8 +56,9 @@ export const createBooking = async (req, res) => {
     }
 };
 
+
 /**
- * --- Get All Bookings ---
+ * --- Get All Bookings with Pagination ---
  */
 export const getAllBookings = async (req, res) => {
     try {
@@ -67,10 +68,7 @@ export const getAllBookings = async (req, res) => {
             sortBy = "createdAt",
             sortDir = "desc",
             status,
-            vehicleRegNo,
-            ownerName,
-            ownerPostalCode,
-            source,
+            search,
         } = req.query;
 
         page = Number(page);
@@ -80,28 +78,35 @@ export const getAllBookings = async (req, res) => {
 
         const filter = {};
         if (status) filter.status = status;
-        if (vehicleRegNo) filter.vehicleRegNo = { $regex: vehicleRegNo, $options: "i" };
-        if (ownerName) filter.ownerName = { $regex: ownerName, $options: "i" };
-        if (ownerPostalCode) filter.ownerPostalCode = { $regex: ownerPostalCode, $options: "i" };
-        if (source) filter.source = { $regex: source, $options: "i" };
+        if (search) {
+            const regex = { $regex: search, $options: "i" };
+            filter.$or = [
+                { vehicleRegNo: regex },
+                { ownerName: regex },
+                { ownerPostalCode: regex },
+                { source: regex },
+            ];
+        }
 
-        const [bookings, total] = await Promise.all([
-            Booking.find(filter)
-                .populate(BOOKING_POPULATE)
-                .skip(skip)
-                .limit(limit)
-                .sort({ [sortBy]: sortOrder }),
-            Booking.countDocuments(filter),
-        ]);
+        const total = await Booking.countDocuments(filter);
+
+        const bookings = await Booking.find(filter)
+            .populate(BOOKING_POPULATE)
+            .sort({ [sortBy]: sortOrder })
+            .skip(skip)
+            .limit(limit)
+            .lean();
 
         res.json({
             success: true,
-            data: bookings,
+            data: bookings, // 👈 always return list here
             pagination: {
                 total,
                 page,
                 limit,
                 totalPages: Math.ceil(total / limit),
+                hasNextPage: page * limit < total,
+                hasPrevPage: page > 1,
             },
         });
     } catch (error) {
@@ -110,13 +115,13 @@ export const getAllBookings = async (req, res) => {
     }
 };
 
+
 /**
  * --- Get Booking by ID ---
  */
 export const getBookingById = async (req, res) => {
     try {
         const { id } = req.params;
-
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return sendError(res, 400, "Invalid booking ID");
         }
@@ -124,12 +129,16 @@ export const getBookingById = async (req, res) => {
         const booking = await Booking.findById(id).populate(BOOKING_POPULATE);
         if (!booking) return sendError(res, 404, "Booking not found");
 
-        res.json({ success: true, booking });
+        res.json({
+            success: true,
+            booking, // 👈 return booking
+        });
     } catch (error) {
         console.error("Get Booking Error:", error);
         sendError(res, 500, error.message);
     }
 };
+
 
 /**
  * --- Update Booking ---
@@ -137,11 +146,9 @@ export const getBookingById = async (req, res) => {
 export const updateBooking = async (req, res) => {
     try {
         const { id } = req.params;
-
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return sendError(res, 400, "Invalid booking ID");
         }
-
         if (!req.body || Object.keys(req.body).length === 0) {
             return sendError(res, 400, "No update fields provided");
         }
@@ -185,7 +192,6 @@ export const updateBooking = async (req, res) => {
             "prebookingPartsCost",
             "prebookingBookingPrice",
         ];
-
         if (Object.keys(req.body).some((field) => costFields.includes(field))) {
             await computeTotals(booking);
         }
@@ -195,13 +201,14 @@ export const updateBooking = async (req, res) => {
         res.json({
             success: true,
             message: `Booking ${booking._id} updated successfully`,
+            booking, // 👈 return updated booking
         });
-
     } catch (error) {
         console.error("Update Booking Error:", error);
         sendError(res, 400, error.message);
     }
 };
+
 
 /**
  * --- Update Booking Status ---
@@ -210,11 +217,9 @@ export const updateBookingStatus = async (req, res) => {
     try {
         const { id } = req.params;
         const { status } = req.body;
-
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return sendError(res, 400, "Invalid booking ID");
         }
-
         if (!status) {
             return sendError(res, 400, "New status is required");
         }
@@ -262,6 +267,7 @@ export const updateBookingStatus = async (req, res) => {
         return res.json({
             success: true,
             message: `Marked as ${status} by ${userName}`,
+            booking, // 👈 return updated booking
         });
     } catch (error) {
         console.error("Update Booking Status Error:", error);
