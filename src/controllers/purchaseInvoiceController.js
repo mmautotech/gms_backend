@@ -41,7 +41,23 @@ export const createPurchaseInvoice = async (req, res) => {
  */
 export const getMyInvoices = async (req, res) => {
     try {
-        let { page = 1, limit = 50, status, supplier, part, partNumber, startDate, endDate, paymentDate, vatIncluded, sortBy, sortOrder = "asc" } = req.query;
+        let {
+            page = 1,
+            limit = 50,
+            status,
+            supplier,
+            part,
+            partName,
+            startDate,
+            endDate,
+            paymentDate,
+            vatIncluded,
+            minPrice,
+            maxPrice,
+            sortBy,
+            sortOrder = "asc"
+        } = req.query;
+
         page = Number(page) || 1;
         limit = Number(limit) || 50;
         const skip = (page - 1) * limit;
@@ -50,31 +66,52 @@ export const getMyInvoices = async (req, res) => {
         if (status) filter.paymentStatus = status;
         if (supplier) filter.supplier = supplier;
         if (vatIncluded !== undefined) filter.vatIncluded = vatIncluded === "true";
-
         if (startDate || endDate) {
             filter.createdAt = {};
             if (startDate) filter.createdAt.$gte = new Date(startDate);
             if (endDate) filter.createdAt.$lte = new Date(endDate);
         }
         if (paymentDate) filter.paymentDate = new Date(paymentDate);
-
         if (part) filter["items.part"] = part;
-        if (partNumber) {
-            const partMatch = await Part.findOne({ partNumber });
-            if (partMatch) filter["items.part"] = partMatch._id;
+
+        // Filter by partName (case-insensitive)
+        if (partName) {
+            const parts = await Part.find({ partName: { $regex: partName, $options: "i" } });
+            if (parts.length > 0) filter["items.part"] = { $in: parts.map(p => p._id) };
+            else filter["items.part"] = null; // no match
         }
 
         const fieldMap = { price: "items.rate", invoiceDate: "createdAt", paymentDate: "paymentDate" };
         const sort = sortBy ? { [fieldMap[sortBy]]: sortOrder === "asc" ? 1 : -1 } : { createdAt: -1 };
 
+        let invoicesQuery = PurchaseInvoice.find(filter)
+            .populate("supplier", "name contact")
+            .populate("items.part", "partName partNumber")
+            .skip(skip)
+            .limit(limit)
+            .sort(sort)
+            .lean();
+
+        // Filter by price range
+        if (minPrice || maxPrice) {
+            const allInvoices = await PurchaseInvoice.find(filter).populate("items.part").lean();
+            const filtered = allInvoices.filter(inv => {
+                const total = inv.items.reduce((sum, i) => sum + Number(i.rate || 0) * (i.quantity || 1), 0);
+                if (minPrice && total < Number(minPrice)) return false;
+                if (maxPrice && total > Number(maxPrice)) return false;
+                return true;
+            });
+            const total = filtered.length;
+            const paginated = filtered.slice(skip, skip + limit);
+            return res.json({
+                success: true,
+                data: paginated,
+                meta: { total, page, pages: Math.ceil(total / limit), limit },
+            });
+        }
+
         const [invoices, total] = await Promise.all([
-            PurchaseInvoice.find(filter)
-                .populate("supplier", "name contact")
-                .populate("items.part", "partName partNumber")
-                .skip(skip)
-                .limit(limit)
-                .sort(sort)
-                .lean(),
+            invoicesQuery,
             PurchaseInvoice.countDocuments(filter),
         ]);
 
@@ -151,7 +188,24 @@ export const updateMyInvoiceStatus = async (req, res) => {
  */
 export const getAllInvoices = async (req, res) => {
     try {
-        let { page = 1, limit = 50, purchaser, supplier, part, partNumber, status, vatIncluded, startDate, endDate, paymentDate, sortBy, sortOrder = "asc" } = req.query;
+        let {
+            page = 1,
+            limit = 50,
+            purchaser,
+            supplier,
+            part,
+            partName,
+            status,
+            vatIncluded,
+            startDate,
+            endDate,
+            paymentDate,
+            minPrice,
+            maxPrice,
+            sortBy,
+            sortOrder = "asc"
+        } = req.query;
+
         page = Number(page) || 1;
         limit = Number(limit) || 50;
         const skip = (page - 1) * limit;
@@ -161,32 +215,53 @@ export const getAllInvoices = async (req, res) => {
         if (supplier) filter.supplier = supplier;
         if (status) filter.paymentStatus = status;
         if (vatIncluded !== undefined) filter.vatIncluded = vatIncluded === "true";
-
         if (startDate || endDate) {
             filter.createdAt = {};
             if (startDate) filter.createdAt.$gte = new Date(startDate);
             if (endDate) filter.createdAt.$lte = new Date(endDate);
         }
         if (paymentDate) filter.paymentDate = new Date(paymentDate);
-
         if (part) filter["items.part"] = part;
-        if (partNumber) {
-            const partMatch = await Part.findOne({ partNumber });
-            if (partMatch) filter["items.part"] = partMatch._id;
+
+        // Filter by partName
+        if (partName) {
+            const parts = await Part.find({ partName: { $regex: partName, $options: "i" } });
+            if (parts.length > 0) filter["items.part"] = { $in: parts.map(p => p._id) };
+            else filter["items.part"] = null;
         }
 
         const fieldMap = { price: "items.rate", invoiceDate: "createdAt", paymentDate: "paymentDate" };
         const sort = sortBy ? { [fieldMap[sortBy]]: sortOrder === "asc" ? 1 : -1 } : { createdAt: -1 };
 
+        let invoicesQuery = PurchaseInvoice.find(filter)
+            .populate("supplier", "name contact")
+            .populate("items.part", "partName partNumber")
+            .populate("purchaser", "username userType")
+            .skip(skip)
+            .limit(limit)
+            .sort(sort)
+            .lean();
+
+        // Filter by price range
+        if (minPrice || maxPrice) {
+            const allInvoices = await PurchaseInvoice.find(filter).populate("items.part").lean();
+            const filtered = allInvoices.filter(inv => {
+                const total = inv.items.reduce((sum, i) => sum + Number(i.rate || 0) * (i.quantity || 1), 0);
+                if (minPrice && total < Number(minPrice)) return false;
+                if (maxPrice && total > Number(maxPrice)) return false;
+                return true;
+            });
+            const total = filtered.length;
+            const paginated = filtered.slice(skip, skip + limit);
+            return res.json({
+                success: true,
+                data: paginated,
+                meta: { total, page, pages: Math.ceil(total / limit), limit },
+            });
+        }
+
         const [invoices, total] = await Promise.all([
-            PurchaseInvoice.find(filter)
-                .populate("supplier", "name contact")
-                .populate("items.part", "partName partNumber")
-                .populate("purchaser", "username userType")
-                .skip(skip)
-                .limit(limit)
-                .sort(sort)
-                .lean(),
+            invoicesQuery,
             PurchaseInvoice.countDocuments(filter),
         ]);
 
@@ -219,8 +294,6 @@ export const deletePurchaseInvoice = async (req, res) => {
  * ✅ Download Purchase Invoice PDF
  * Query: ?proforma=true → PROFORMA INVOICE
  */
-
-
 export const downloadPurchaseInvoicePdf = async (req, res) => {
     try {
         const { id } = req.params;

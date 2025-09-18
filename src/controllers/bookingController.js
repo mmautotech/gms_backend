@@ -60,6 +60,9 @@ export const createBooking = async (req, res) => {
 /**
  * --- Get All Bookings with Pagination ---
  */
+/**
+ * --- Get All Bookings with Pagination & Multi-Field Search ---
+ */
 export const getAllBookings = async (req, res) => {
     try {
         let {
@@ -68,7 +71,11 @@ export const getAllBookings = async (req, res) => {
             sortBy = "createdAt",
             sortDir = "desc",
             status,
-            search,
+            ownerName,
+            vehicleRegNo,
+            makeModel,
+            ownerPostalCode,
+            type, // <-- add type param
         } = req.query;
 
         page = Number(page);
@@ -78,15 +85,15 @@ export const getAllBookings = async (req, res) => {
 
         const filter = {};
         if (status) filter.status = status;
-        if (search) {
-            const regex = { $regex: search, $options: "i" };
-            filter.$or = [
-                { vehicleRegNo: regex },
-                { ownerName: regex },
-                { ownerPostalCode: regex },
-                { source: regex },
-            ];
-        }
+        if (type === "prebooking") filter.prebookingServices = { $exists: true, $ne: [] };
+
+        // Multi-field search
+        const orConditions = [];
+        if (ownerName) orConditions.push({ ownerName: { $regex: ownerName, $options: "i" } });
+        if (vehicleRegNo) orConditions.push({ vehicleRegNo: { $regex: vehicleRegNo, $options: "i" } });
+        if (makeModel) orConditions.push({ makeModel: { $regex: makeModel, $options: "i" } });
+        if (ownerPostalCode) orConditions.push({ ownerPostalCode: { $regex: ownerPostalCode, $options: "i" } });
+        if (orConditions.length > 0) filter.$or = orConditions;
 
         const total = await Booking.countDocuments(filter);
 
@@ -97,9 +104,15 @@ export const getAllBookings = async (req, res) => {
             .limit(limit)
             .lean();
 
+        // Continuous row numbers
+        const bookingsWithRowNumber = bookings.map((b, index) => ({
+            ...b,
+            rowNumber: skip + index + 1,
+        }));
+
         res.json({
             success: true,
-            data: bookings, // 👈 always return list here
+            data: bookingsWithRowNumber,
             pagination: {
                 total,
                 page,
@@ -114,6 +127,8 @@ export const getAllBookings = async (req, res) => {
         sendError(res, 500, error.message);
     }
 };
+
+
 
 
 /**
