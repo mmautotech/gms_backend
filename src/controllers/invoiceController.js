@@ -43,27 +43,33 @@ export const getInvoiceStats = async (req, res) => {
 };
 
 // -----------------------------
-// 🧾 Get or Create Invoice by Booking ID
+// 🧾 Generate (or Regenerate) Invoice by Booking ID
 // -----------------------------
-export const getInvoiceByBooking = async (req, res) => {
+export const generateInvoiceByBookingId = async (req, res) => {
   try {
     const { bookingId } = req.params;
-    const { createdBy, discountAmount = 0, vatIncluded = false, status = "Unpaid" } = req.body || {};
+    const {
+      createdBy,
+      discountAmount = 0,
+      vatIncluded = false,
+      status = "Unpaid",
+    } = req.body || {};
 
-    if (!bookingId) return res.status(400).json({ message: "Booking ID is required" });
+    if (!bookingId) {
+      return res.status(400).json({ message: "Booking ID is required" });
+    }
 
-    let invoice = await Invoice.findOne({ booking: bookingId }).lean();
-    if (invoice) return res.status(200).json(invoice);
-
+    // ✅ Ensure booking exists
     const booking = await Booking.findById(bookingId)
       .populate("prebookingServices", "name")
       .populate("upsells.services", "name")
       .lean();
 
-    if (!booking) return res.status(404).json({ message: "Booking not found" });
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
 
-    const invoiceNo = await generateInvoiceNo();
-
+    // ✅ Build items
     const items = [];
     if (booking.prebookingServices?.length) {
       booking.prebookingServices.forEach((service, index) => {
@@ -75,7 +81,7 @@ export const getInvoiceByBooking = async (req, res) => {
     }
     if (booking.upsells?.length) {
       booking.upsells.forEach((upsell, index) => {
-        upsell.services?.forEach(service => {
+        upsell.services?.forEach((service) => {
           items.push({
             description: `Upsell ${index} - ${service.name}`,
             amount: upsell.upsellPrice || 0,
@@ -84,10 +90,35 @@ export const getInvoiceByBooking = async (req, res) => {
       });
     }
 
+    // ✅ Totals
     const subtotal = items.reduce((sum, i) => sum + i.amount, 0);
     const afterDiscount = subtotal - discountAmount;
     const finalTotal = vatIncluded ? afterDiscount * 1.2 : afterDiscount;
 
+    // ✅ Check if invoice exists
+    let invoice = await Invoice.findOne({ booking: booking._id });
+    if (invoice) {
+      // 🔄 Update existing invoice (keep old invoiceNo)
+      invoice.customerName = booking.ownerName;
+      invoice.contactNo = booking.ownerNumber;
+      invoice.email = booking.ownerEmail;
+      invoice.vehicleRegNo = booking.vehicleRegNo;
+      invoice.makeModel = booking.makeModel;
+      invoice.postalCode = booking.ownerPostalCode;
+      invoice.invoiceDate = new Date();
+      invoice.items = items;
+      invoice.discountAmount = discountAmount;
+      invoice.vatIncluded = vatIncluded;
+      invoice.status = status;
+      invoice.totalAmount = finalTotal;
+      invoice.createdBy = createdBy || booking.createdBy;
+
+      await invoice.save();
+      return res.status(200).json(invoice);
+    }
+
+    // 🆕 Create new invoice if none exists
+    const invoiceNo = await generateInvoiceNo();
     invoice = await Invoice.create({
       booking: booking._id,
       invoiceNo,
@@ -108,10 +139,41 @@ export const getInvoiceByBooking = async (req, res) => {
 
     res.status(201).json(invoice);
   } catch (err) {
-    console.error("Get/Create invoice error:", err);
-    res.status(500).json({ message: "Failed to get or create invoice", error: err.message });
+    console.error("Generate invoice error:", err);
+    res
+      .status(500)
+      .json({ message: "Failed to generate invoice", error: err.message });
   }
 };
+
+// -----------------------------
+// 📌 Get Invoice by Booking ID
+// → fetch if exists, regenerate if missing
+// -----------------------------
+export const getInvoiceByBookingId = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+
+    if (!bookingId) {
+      return res.status(400).json({ message: "Booking ID is required" });
+    }
+
+    let invoice = await Invoice.findOne({ booking: bookingId }).lean();
+    if (invoice) {
+      return res.status(200).json(invoice);
+    }
+
+    // ✅ If missing → generate
+    return await generateInvoiceByBookingId(req, res);
+  } catch (err) {
+    console.error("Get invoice error:", err);
+    res.status(500).json({
+      message: "Failed to fetch invoice",
+      error: err.message,
+    });
+  }
+};
+
 
 // -----------------------------
 // 🧾 Get All Invoices
