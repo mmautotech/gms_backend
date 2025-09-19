@@ -8,7 +8,6 @@ const moneyOpts = { type: Number, min: 0, default: 0 };
 const upsellSchema = new mongoose.Schema(
     {
         services: [{ type: ObjectId, ref: "Service", required: true, default: [] }],
-        parts: [{ type: ObjectId, ref: "Part", default: [] }],
         labourCost: moneyOpts,
         partsCost: moneyOpts,
         upsellPrice: moneyOpts,
@@ -17,6 +16,7 @@ const upsellSchema = new mongoose.Schema(
     },
     { timestamps: true }
 );
+
 
 // --- Booking Schema ---
 const BookingSchema = new mongoose.Schema(

@@ -2,7 +2,6 @@
 import mongoose from "mongoose";
 import Booking from "../models/Booking.js";
 import Service from "../models/Service.js";
-import Part from "../models/Part.js";
 import { sendError } from "../utils/errorHandler.js";
 import { saveWithCalculations } from "../utils/bookingHelpers.js";
 import { BOOKING_POPULATE } from "../constants/bookingConstants.js";
@@ -24,7 +23,6 @@ export const createUpsell = async (req, res) => {
 
         booking.upsells.push({
             services: req.body.serviceId ? [req.body.serviceId] : [],
-            parts: req.body.partId ? [req.body.partId] : [],
             labourCost: req.body.labourCost || 0,
             partsCost: req.body.partsCost || 0,
             upsellPrice: req.body.upsellPrice || 0,
@@ -33,6 +31,7 @@ export const createUpsell = async (req, res) => {
         });
 
         await saveWithCalculations(booking);
+
         const populated = await Booking.findById(booking._id).populate(BOOKING_POPULATE);
         res.status(201).json({ success: true, booking: populated });
     } catch (error) {
@@ -51,50 +50,40 @@ export const getSellsByBooking = async (req, res) => {
         const booking = await Booking.findById(bookingId)
             .populate("prebookingServices", "name")
             .populate("services", "name")
-            .populate("parts", "name")
-            .lean(); // lean = plain JS object (faster)
+            .lean();
 
         if (!booking) return sendError(res, 404, "Booking not found");
 
-        // Populate upsell service/part names manually
+        // Populate upsell services only
         const populatedUpsells = await Promise.all(
             (booking.upsells || []).map(async (upsell) => {
                 const services = await Service.find(
                     { _id: { $in: upsell.services || [] } },
                     "_id name"
                 );
-                const parts = await Part.find(
-                    { _id: { $in: upsell.parts || [] } },
-                    "_id name"
-                );
 
-                return {
-                    ...upsell,
-                    services,
-                    parts,
-                };
+                const { _id, labourCost, partsCost, upsellPrice, status, createdBy, updatedAt, createdAt } = upsell;
+                return { _id, services, labourCost, partsCost, upsellPrice, status, createdBy, updatedAt, createdAt };
             })
         );
 
         const result = {
             success: true,
 
-            // 🔹 Prebooking details
+            // Prebooking details
             prebookingServices: booking.prebookingServices || [],
             prebookingLabourCost: booking.prebookingLabourCost || 0,
             prebookingPartsCost: booking.prebookingPartsCost || 0,
             prebookingBookingPrice: booking.prebookingBookingPrice || 0,
 
-            // 🔹 All upsell items
+            // Upsells
             upsells: populatedUpsells,
 
-            // 🔹 Final booking totals (after upsells)
+            // Final booking totals
             services: booking.services || [],
-            parts: booking.parts || [],
-            labourCost: booking.labourCost || 0,
             partsCost: booking.partsCost || 0,
+            labourCost: booking.labourCost || 0,
             bookingPrice: booking.bookingPrice || 0,
-
         };
 
         res.json(result);
