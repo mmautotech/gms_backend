@@ -43,7 +43,7 @@ export const getMyInvoices = async (req, res) => {
     try {
         let {
             page = 1,
-            limit = 50,
+            limit = 5,
             status,
             supplier,
             part,
