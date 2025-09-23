@@ -1,3 +1,4 @@
+// src/controllers/booking/getAllBookings.js
 import mongoose from "mongoose";
 import Booking from "../../models/Booking.js";
 
@@ -17,12 +18,15 @@ export const getAllBookings = async (req, res) => {
             services,
         } = req.query;
 
-        page = Number(page);
+        // 📌 Pagination
         limit = Number(limit);
         const allowedLimits = [5, 25, 50, 100];
         if (!allowedLimits.includes(limit)) limit = 25;
+
+        page = Number(page);
         const skip = (page - 1) * limit;
 
+        // 📌 Sort field mapping
         const SORT_FIELD_MAP = {
             createdDate: "createdAt",
             scheduledDate: "scheduledDate",
@@ -34,8 +38,9 @@ export const getAllBookings = async (req, res) => {
             ownerPostalCode: "ownerPostalCode",
             ownerNumber: "ownerNumber",
         };
-        const dbSortField = SORT_FIELD_MAP[sortBy] ?? SORT_FIELD_MAP.createdDate;
+        const dbSortField = SORT_FIELD_MAP[sortBy] ?? "createdAt";
 
+        // 📌 Default sort direction (dates → desc, others → asc)
         const DATE_FIELDS = new Set([
             "createdDate",
             "scheduledDate",
@@ -52,6 +57,7 @@ export const getAllBookings = async (req, res) => {
 
         const sortOrder = effectiveSortDir === "desc" ? -1 : 1;
 
+        // 📌 Filters
         const filter = {};
 
         if (typeof status === "string" && status.trim() !== "") {
@@ -61,10 +67,8 @@ export const getAllBookings = async (req, res) => {
             }
         }
 
+        // Date range filter
         if (fromDate || toDate) {
-            const toDateObj = toDate ? new Date(toDate) : null;
-            const fromDateObj = fromDate ? new Date(fromDate) : null;
-
             const DATE_FIELD_MAP = {
                 createdDate: "createdAt",
                 scheduledDate: "scheduledDate",
@@ -74,32 +78,26 @@ export const getAllBookings = async (req, res) => {
             };
 
             const dateFilterField = DATE_FIELD_MAP[sortBy] || "createdAt";
-
             filter[dateFilterField] = {};
-            if (fromDateObj) filter[dateFilterField].$gte = fromDateObj;
-            if (toDateObj) {
-                toDateObj.setHours(23, 59, 59, 999);
-                filter[dateFilterField].$lte = toDateObj;
+
+            if (fromDate) filter[dateFilterField].$gte = new Date(fromDate);
+            if (toDate) {
+                const to = new Date(toDate);
+                to.setHours(23, 59, 59, 999);
+                filter[dateFilterField].$lte = to;
             }
+
             if (Object.keys(filter[dateFilterField]).length === 0) {
                 delete filter[dateFilterField];
             }
         }
 
+        // Text search
         if (typeof search === "string" && search.trim()) {
-            const regex = new RegExp(search.trim(), "i");
-            filter.$or = [
-                { vehicleRegNo: regex },
-                { makeModel: regex },
-                { ownerName: regex },
-                { ownerAddress: regex },
-                { ownerPostalCode: regex },
-                { ownerEmail: regex },
-                { ownerNumber: regex },
-                { remarks: regex },
-            ];
+            filter.$text = { $search: search.trim() };
         }
 
+        // Services filter
         if (services) {
             const ids = String(services)
                 .split(",")
@@ -108,6 +106,7 @@ export const getAllBookings = async (req, res) => {
             if (ids.length > 0) filter.services = { $in: ids };
         }
 
+        // 📌 Query
         const total = await Booking.countDocuments(filter);
 
         const projection = `
@@ -137,6 +136,7 @@ export const getAllBookings = async (req, res) => {
             .limit(limit)
             .lean();
 
+        // 📌 Transform
         const data = bookings.map((b, index) => ({
             id: b._id.toString(),
             rowNumber: skip + index + 1,
@@ -166,13 +166,14 @@ export const getAllBookings = async (req, res) => {
             bookingPrice: b.bookingPrice,
         }));
 
+        // 📌 Response
         res.json({
             success: true,
             params: {
-                search: typeof search === "string" && search.trim() ? search.trim() : null,
+                search: search || null,
                 fromDate: fromDate || null,
                 toDate: toDate || null,
-                status: typeof status === "string" && status.trim() ? status.trim().toLowerCase() : null,
+                status: status || null,
                 services: services || null,
                 sortBy,
                 sortDir: effectiveSortDir,

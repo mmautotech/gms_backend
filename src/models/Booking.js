@@ -138,7 +138,43 @@ BookingSchema.pre("save", function (next, options) {
     next();
 });
 
-// Composite index for faster status-based lookups
-BookingSchema.index({ vehicleRegNo: 1, status: 1 });
+
+// Status + dates
+BookingSchema.index({ status: 1, createdAt: -1 });
+BookingSchema.index({ status: 1, scheduledDate: -1 });
+BookingSchema.index({ status: 1, arrivedAt: -1 });
+BookingSchema.index({ status: 1, cancelledAt: -1 });
+BookingSchema.index({ status: 1, completedAt: -1 });
+
+// Services filter
+BookingSchema.index({ services: 1 });
+
+// Text search across all searchable fields
+BookingSchema.index({
+    vehicleRegNo: "text",
+    makeModel: "text",
+    ownerName: "text",
+    ownerAddress: "text",
+    ownerPostalCode: "text",
+    ownerEmail: "text",
+    ownerNumber: "text",
+    remarks: "text",
+});
+
+
+BookingSchema.virtual("createdDate").get(function () {
+    return this.createdAt;
+});
+BookingSchema.virtual("registration").get(function () {
+    return this.vehicleRegNo;
+});
+
+BookingSchema.virtual("phoneNumber").get(function () {
+    return this.ownerNumber;
+});
+
+BookingSchema.virtual("postCode").get(function () {
+    return this.ownerPostalCode;
+});
 
 export default mongoose.model("Booking", BookingSchema);

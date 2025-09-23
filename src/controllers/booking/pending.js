@@ -1,9 +1,12 @@
-import mongoose from "mongoose";
+// src/controllers/booking/getAllPendingBookings.js
 import Booking from "../../models/Booking.js";
 import { sendError } from "../../utils/errorHandler.js";
 
 export const getAllPendingBookings = async (req, res) => {
     try {
+        // Always pending
+        const filter = { status: "pending" };
+
         let {
             page = 1,
             limit = 25,
@@ -12,21 +15,17 @@ export const getAllPendingBookings = async (req, res) => {
             fromDate,
             toDate,
             search,
-            services,
         } = req.query;
 
-        page = Number(page);
+        // 📌 Pagination
         limit = Number(limit);
         const allowedLimits = [5, 25, 50, 100];
         if (!allowedLimits.includes(limit)) limit = 25;
+
+        page = Number(page);
         const skip = (page - 1) * limit;
 
-        // ✅ Only pending bookings
-        const filter = { status: "pending" };
-
-        // -------------------------
         // 📌 Sorting
-        // -------------------------
         const SORT_FIELD_MAP = {
             createdDate: "createdAt",
             scheduledDate: "scheduledDate",
@@ -38,58 +37,42 @@ export const getAllPendingBookings = async (req, res) => {
         const dbSortField = SORT_FIELD_MAP[sortBy] || "createdAt";
         const sortOrder = sortDir?.toLowerCase() === "asc" ? 1 : -1;
 
-        // -------------------------
         // 📌 Date filtering
-        // -------------------------
+        const from = fromDate ? new Date(fromDate) : null;
+        const to = toDate ? new Date(toDate) : null;
+        if (to) to.setHours(23, 59, 59, 999);
+
         const dateField = dbSortField === "scheduledDate" ? "scheduledDate" : "createdAt";
-        if (fromDate || toDate) {
+        if (from || to) {
             filter[dateField] = {};
-            if (fromDate) filter[dateField].$gte = new Date(fromDate);
-            if (toDate) {
-                const to = new Date(toDate);
-                to.setHours(23, 59, 59, 999);
-                filter[dateField].$lte = to;
-            }
+            if (from) filter[dateField].$gte = from;
+            if (to) filter[dateField].$lte = to;
         }
 
-        // -------------------------
-        // 📌 Search
-        // -------------------------
+        // 📌 Search (regex for lightweight fields)
         if (search) {
             const regex = new RegExp(search, "i");
             filter.$or = [
-                { vehicleRegNo: regex },   // registration
-                { ownerNumber: regex },    // phoneNumber
-                { ownerPostalCode: regex } // postCode
+                { vehicleRegNo: regex },
+                { ownerNumber: regex },
+                { ownerPostalCode: regex },
             ];
         }
 
-        // -------------------------
-        // 📌 Services filter
-        // -------------------------
-        if (services) {
-            const ids = services
-                .split(",")
-                .map((id) => id.trim())
-                .filter((id) => mongoose.Types.ObjectId.isValid(id));
-            if (ids.length > 0) filter.services = { $in: ids };
-        }
-
-        // -------------------------
         // 📌 Query
-        // -------------------------
         const total = await Booking.countDocuments(filter);
 
         const bookings = await Booking.find(filter)
+            .select(
+                "createdAt scheduledDate vehicleRegNo ownerNumber ownerPostalCode bookingPrice createdBy"
+            )
             .populate([{ path: "createdBy", select: "username" }])
             .sort({ [dbSortField]: sortOrder })
             .skip(skip)
             .limit(limit)
             .lean();
 
-        // -------------------------
         // 📌 Transform
-        // -------------------------
         const data = bookings.map((b, index) => ({
             id: b._id,
             rowNumber: skip + index + 1,
@@ -102,14 +85,13 @@ export const getAllPendingBookings = async (req, res) => {
             bookedBy: b.createdBy?.username ?? null,
         }));
 
+        // 📌 Response
         res.json({
             success: true,
             params: {
                 search: search || null,
                 fromDate: fromDate || null,
                 toDate: toDate || null,
-                status: "pending",
-                services: services || null,
                 sortBy,
                 sortDir: sortDir || "desc",
                 perPage: limit,
