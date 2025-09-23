@@ -49,25 +49,79 @@ export const createBookingSchema = z.object({
 // -----------------------------
 // 📄 GET /bookings (query)
 // -----------------------------
-
 export const listBookingsQuerySchema = z.object({
     page: z.coerce.number().min(1).optional(),
-    limit: z.coerce.number().min(1).optional(),
-    status: z.enum(["pending", "arrived", "completed", "cancelled"]).optional(),
+    limit: z.coerce.number()
+        .refine((val) => [5, 25, 50, 100].includes(val), {
+            message: "Limit must be one of [5, 25, 50, 100]",
+        })
+        .optional(),
+
+    status: z
+        .preprocess((v) => (typeof v === "string" ? v.toLowerCase() : v),
+            z.enum(["pending", "arrived", "completed", "cancelled"])
+        )
+        .optional(),
+
+    // ✅ include createdDate
+    sortBy: z.enum([
+        "createdDate",
+        "scheduledDate",
+        "arrivedDate",
+        "cancelledDate",
+        "completedDate",
+        "vehicleRegNo",
+        "makeModel",
+        "ownerPostalCode",
+        "ownerNumber",
+    ]).optional(),
+    sortDir: z.enum(["asc", "desc"]).optional(),
+
+    fromDate: z.coerce.date().optional(),
+    toDate: z.coerce.date().optional(),
+
+    search: z.string().optional(),
+
+    services: z
+        .string()
+        .regex(/^[a-f\d]{24}(,[a-f\d]{24})*$/i, "Invalid MongoDB ObjectId(s)")
+        .optional(),
+
     vehicleRegNo: z.string().optional(),
     ownerName: z.string().optional(),
     ownerPostalCode: z.string().optional(),
     source: z.string().optional(),
+});
+
+
+// -----------------------------
+// 📄 GET /bookings/pending (query)
+// -----------------------------
+export const listPendingBookingsQuerySchema = z.object({
+    page: z.coerce.number().min(1).optional(),
+    limit: z.coerce.number()
+        .refine((val) => [5, 25, 50, 100].includes(val), {
+            message: "Limit must be one of [5, 25, 50, 100]",
+        })
+        .optional(),
+
     sortBy: z.enum([
-        "createdAt",
-        "updatedAt",
+        "createdDate",     // bookingDate
         "scheduledDate",
-        "ownerName",
-        "vehicleRegNo",
-        "status",
+        "vehicleRegNo",    // registration
+        "ownerNumber",     // phoneNumber
+        "ownerPostalCode", // postCode
+        "bookingPrice",
+        "createdBy"
     ]).optional(),
     sortDir: z.enum(["asc", "desc"]).optional(),
+
+    fromDate: z.coerce.date().optional(),
+    toDate: z.coerce.date().optional(),
+
+    search: z.string().optional(),
 });
+
 
 // -----------------------------
 // 📄 GET /bookings/:id (params)

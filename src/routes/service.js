@@ -9,6 +9,7 @@ import {
 import {
   createService,
   getAllServices,
+  getServiceOptions,
   updateService,
   deleteService,
 } from "../controllers/serviceController.js";
@@ -16,6 +17,9 @@ import {
 const router = express.Router();
 
 router.use(requireAuth); // apply token auth to all routes
+
+// NEW: id->name list/map (optionally filter by enabled)
+router.get("/options", getServiceOptions);
 
 router.post("/", validate, ...createServiceValidator, createService);
 router.get("/", getAllServices);

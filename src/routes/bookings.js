@@ -1,5 +1,6 @@
+// src/routes/booking.js
 import express from "express";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireRole } from "../middleware/auth.js";
 import { validateWithZod } from "../middleware/zodMiddleware.js";
 import {
   createBookingSchema,
@@ -9,14 +10,17 @@ import {
   updateBookingParamSchema,
   updateBookingStatusParamSchema,
   updateBookingStatusBodySchema,
+  listPendingBookingsQuerySchema,
 } from "../validators/booking.js";
 import {
   createBooking,
   getAllBookings,
+  getAllPendingBookings,             // 👈 NEW
   getBookingById,
   updateBooking,
   updateBookingStatus,
-} from "../controllers/bookingController.js";
+  exportBookings,
+} from "../controllers/booking/index.js";
 
 const router = express.Router();
 
@@ -25,32 +29,46 @@ const router = express.Router();
 // ---------------------------
 router.use(requireAuth);
 
+// Admin-only export
+router.get(
+  "/export",
+  requireRole("admin"),
+  exportBookings
+);
+
 // ---------------------------
 // 📌 Booking CRUD
 // ---------------------------
 
-// POST /bookings → Create a booking
+// Create booking
 router.post(
   "/",
   validateWithZod(createBookingSchema),
   createBooking
 );
 
-// GET /bookings → List bookings with filters
+// List all bookings
 router.get(
   "/",
   validateWithZod(listBookingsQuerySchema, "query"),
   getAllBookings
 );
 
-// GET /bookings/:id → Fetch a single booking
+// List pending bookings only
+router.get(
+  "/pending",
+  validateWithZod(listPendingBookingsQuerySchema, "query"),
+  getAllPendingBookings
+);
+
+// Get single booking
 router.get(
   "/:id",
   validateWithZod(getBookingByIdParamSchema, "params"),
   getBookingById
 );
 
-// PUT /bookings/:id → Update booking fields
+// Update booking
 router.put(
   "/:id",
   validateWithZod(updateBookingParamSchema, "params"),
@@ -62,7 +80,7 @@ router.put(
 // 🔄 Booking Status Management
 // ---------------------------
 
-// PATCH /bookings/status/:id → Update status (ARRIVED, COMPLETED, CANCELLED)
+// Update status
 router.patch(
   "/status/:id",
   validateWithZod(updateBookingStatusParamSchema, "params"),
