@@ -17,7 +17,6 @@ const upsellSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
-
 // --- Booking Schema ---
 const BookingSchema = new mongoose.Schema(
     {
@@ -45,7 +44,7 @@ const BookingSchema = new mongoose.Schema(
             type: String,
             trim: true,
             lowercase: true,
-            required: true
+            required: true,
         },
         ownerNumber: { type: String, trim: true, required: true },
         scheduledDate: { type: Date, required: true },
@@ -56,16 +55,29 @@ const BookingSchema = new mongoose.Schema(
             maxlength: VALIDATION_LIMITS.remarksMaxLength,
         },
 
+        // Prebooking
         prebookingServices: [{ type: ObjectId, ref: "Service", default: [] }],
         prebookingLabourCost: { ...moneyOpts, required: true },
         prebookingPartsCost: { ...moneyOpts, required: true },
         prebookingBookingPrice: { ...moneyOpts, required: true },
+
+        // 📸 Photos stored in DB
         bookingConfirmationPhoto: {
-            type: String, // store URL or filename
-            trim: true,
-            default: ""
+            type: Buffer,
+            required: true,
+            select: false,   // <-- optional safeguard
+        },
+        bookingConfirmationPhotoCompressed: {
+            type: Buffer,
+            required: true,
+            select: false,
+        },
+        bookingConfirmationPhotoType: {
+            type: String, // e.g. "image/jpeg"
+            default: "image/jpeg",
         },
 
+        // Services & parts
         services: [{ type: ObjectId, ref: "Service", default: [] }],
         parts: [{ type: ObjectId, ref: "Part", default: [] }],
 
@@ -80,6 +92,7 @@ const BookingSchema = new mongoose.Schema(
             index: true,
         },
 
+        // Status lifecycle
         arrivedAt: Date,
         arrivedBy: { type: ObjectId, ref: "User" },
         completedAt: Date,
@@ -103,12 +116,9 @@ const BookingSchema = new mongoose.Schema(
                 ret.id = ret._id.toString();
                 delete ret._id;
 
-                // Clean up virtuals if they exist
-                delete ret.totalExpense;
-                delete ret.profit;
-                delete ret.profitPercentage;
-                delete ret.totalServices;
-                delete ret.totalParts;
+                // Strip heavy binary data from default JSON response
+                delete ret.bookingConfirmationPhoto;
+                delete ret.bookingConfirmationPhotoCompressed;
 
                 return ret;
             },
@@ -117,12 +127,12 @@ const BookingSchema = new mongoose.Schema(
     }
 );
 
-// Track original status to enforce edit restrictions
+// Track original status
 BookingSchema.pre("init", function (doc) {
     this._originalStatus = doc.status;
 });
 
-// Prevent edits to COMPLETED or CANCELLED bookings unless explicitly allowed
+// Restrict edits if booking is final
 BookingSchema.pre("save", function (next, options) {
     const isFinal = [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED].includes(this.status);
     if (!this.isNew && isFinal && this.isModified() && !options?.allowEdit) {
@@ -131,25 +141,22 @@ BookingSchema.pre("save", function (next, options) {
             [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED].includes(this._originalStatus)
         ) {
             return next(
-                new Error("Completed or cancelled bookings cannot be edited unless explicitly allowed.")
+                new Error(
+                    "Completed or cancelled bookings cannot be edited unless explicitly allowed."
+                )
             );
         }
     }
     next();
 });
 
-
-// Status + dates
+// Indexes
 BookingSchema.index({ status: 1, createdAt: -1 });
 BookingSchema.index({ status: 1, scheduledDate: -1 });
 BookingSchema.index({ status: 1, arrivedAt: -1 });
 BookingSchema.index({ status: 1, cancelledAt: -1 });
 BookingSchema.index({ status: 1, completedAt: -1 });
-
-// Services filter
 BookingSchema.index({ services: 1 });
-
-// Text search across all searchable fields
 BookingSchema.index({
     vehicleRegNo: "text",
     makeModel: "text",
@@ -161,18 +168,16 @@ BookingSchema.index({
     remarks: "text",
 });
 
-
+// Virtuals
 BookingSchema.virtual("createdDate").get(function () {
     return this.createdAt;
 });
 BookingSchema.virtual("registration").get(function () {
     return this.vehicleRegNo;
 });
-
 BookingSchema.virtual("phoneNumber").get(function () {
     return this.ownerNumber;
 });
-
 BookingSchema.virtual("postCode").get(function () {
     return this.ownerPostalCode;
 });

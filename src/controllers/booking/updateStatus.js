@@ -15,6 +15,10 @@ export const updateBookingStatus = async (req, res) => {
             return sendError(res, 400, "New status is required");
         }
 
+        // normalize request → lowerCase
+        const normalizedStatus = status.toLowerCase();
+
+
         let booking = await Booking.findById(id);
         if (!booking) return sendError(res, 404, "Booking not found");
 
@@ -25,18 +29,22 @@ export const updateBookingStatus = async (req, res) => {
             [BOOKING_STATUS.CANCELLED]: [],
         };
 
-        if (!allowedTransitions[booking.status].includes(status)) {
-            return sendError(res, 400, `Invalid status transition: ${booking.status} → ${status}`);
+        if (!allowedTransitions[booking.status].includes(normalizedStatus)) {
+            return sendError(
+                res,
+                400,
+                `Invalid status transition: ${booking.status} → ${normalizedStatus}`
+            );
         }
 
         const userId = req.user?._id;
         const userName = req.user?.username || "Unknown user";
         const now = new Date();
 
-        booking.status = status;
+        booking.status = normalizedStatus;
         booking.updatedBy = userId;
 
-        switch (status) {
+        switch (normalizedStatus) {
             case BOOKING_STATUS.ARRIVED:
                 booking.arrivedAt = now;
                 booking.arrivedBy = userId;
@@ -55,8 +63,7 @@ export const updateBookingStatus = async (req, res) => {
 
         return res.json({
             success: true,
-            message: `Marked as ${status} by ${userName}`,
-            booking,
+            message: `Marked as ${normalizedStatus} by ${userName}`,
         });
     } catch (error) {
         console.error("Update Booking Status Error:", error);

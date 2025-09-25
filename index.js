@@ -13,6 +13,7 @@ import invoiceRoutes from './src/routes/invoiceRoutes.js';
 import purchaseInvoiceRoutes from './src/routes/purchaseInvoiceRoutes.js';
 import { errorHandlerMiddleware } from "./src/utils/errorHandler.js";
 import dashoardRoutes from "./src/routes/dashboardRoutes.js"
+import userRoutes from "./src/routes/user.js";
 
 const app = express();
 
@@ -68,7 +69,7 @@ app.use('/api/upsell', upSellRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/purchase-invoices', purchaseInvoiceRoutes);
 app.use('/api/dashboard', dashoardRoutes);
-
+app.use("/api/users", userRoutes);
 
 /** ❗ Custom error handler */
 app.use(errorHandlerMiddleware);

@@ -6,6 +6,7 @@ import {
   createBookingSchema,
   listBookingsQuerySchema,
   getBookingByIdParamSchema,
+  getBookingPhotoParamSchema,
   updateBookingBodySchema,
   updateBookingParamSchema,
   updateBookingStatusParamSchema,
@@ -15,8 +16,9 @@ import {
 import {
   createBooking,
   getAllBookings,
-  getAllPendingBookings,             // 👈 NEW
+  getAllPendingBookings,
   getBookingById,
+  getBookingPhoto,
   updateBooking,
   updateBookingStatus,
   exportBookings,
@@ -66,6 +68,13 @@ router.get(
   "/:id",
   validateWithZod(getBookingByIdParamSchema, "params"),
   getBookingById
+);
+
+// Get single booking photo
+router.get(
+  "/:id/photo",
+  validateWithZod(getBookingPhotoParamSchema, "params"),
+  getBookingPhoto
 );
 
 // Update booking
