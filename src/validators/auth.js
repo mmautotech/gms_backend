@@ -35,3 +35,15 @@ export const forgotPasswordValidator = [
         .trim()
         .notEmpty().withMessage("Username is required")
 ];
+
+
+export const adminChangePasswordValidator = [
+    body("username")
+        .trim()
+        .notEmpty().withMessage("Username is required")
+        .isLength({ min: 3 }).withMessage("Username must be at least 3 characters"),
+
+    body("newPassword")
+        .notEmpty().withMessage("New password is required")
+        .isLength({ min: 6 }).withMessage("New password must be at least 6 characters"),
+];

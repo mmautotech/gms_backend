@@ -35,7 +35,7 @@ const InvoiceSchema = new mongoose.Schema(
     // Totals
     totalAmount: { ...moneyOpts, required: true },
 
-    // ✅ New fields
+    // ✅ Financial fields
     discountAmount: { type: Number, min: 0, default: 0 },
     vatIncluded: { type: Boolean, default: false },
     status: {
@@ -47,8 +47,9 @@ const InvoiceSchema = new mongoose.Schema(
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: false, // optional now
     },
+
+    notes: { type: String, default: "" },
   },
   {
     timestamps: true,

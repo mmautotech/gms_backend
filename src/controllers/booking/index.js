@@ -6,3 +6,4 @@ export { getBookingPhoto } from "./getBookingPhoto.js"
 export { updateBooking } from "./update.js";
 export { updateBookingStatus } from "./updateStatus.js";
 export { exportBookings } from "./export.js";
+export { getAllArrivedBookings } from "./arrived.js";

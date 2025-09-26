@@ -12,6 +12,7 @@ import {
   updateBookingStatusParamSchema,
   updateBookingStatusBodySchema,
   listPendingBookingsQuerySchema,
+  listArrivedBookingsQuerySchema,
 } from "../validators/booking.js";
 import {
   createBooking,
@@ -22,6 +23,7 @@ import {
   updateBooking,
   updateBookingStatus,
   exportBookings,
+  getAllArrivedBookings
 } from "../controllers/booking/index.js";
 
 const router = express.Router();
@@ -61,6 +63,13 @@ router.get(
   "/pending",
   validateWithZod(listPendingBookingsQuerySchema, "query"),
   getAllPendingBookings
+);
+
+// 👇 NEW: List arrived bookings only
+router.get(
+  "/arrived",
+  validateWithZod(listArrivedBookingsQuerySchema, "query"), // reuse validation
+  getAllArrivedBookings
 );
 
 // Get single booking

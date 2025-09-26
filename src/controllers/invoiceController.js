@@ -48,57 +48,44 @@ export const getInvoiceStats = async (req, res) => {
 export const generateInvoiceByBookingId = async (req, res) => {
   try {
     const { bookingId } = req.params;
-    const {
-      createdBy,
-      discountAmount = 0,
-      vatIncluded = false,
-      status = "Unpaid",
-    } = req.body || {};
+    const { createdBy, discountAmount = 0, vatIncluded = false, status = "Unpaid" } = req.body || {};
 
-    if (!bookingId) {
-      return res.status(400).json({ message: "Booking ID is required" });
-    }
+    if (!bookingId) return res.status(400).json({ message: "Booking ID is required" });
 
-    // ✅ Ensure booking exists
     const booking = await Booking.findById(bookingId)
       .populate("prebookingServices", "name")
       .populate("upsells.services", "name")
       .lean();
 
-    if (!booking) {
-      return res.status(404).json({ message: "Booking not found" });
-    }
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
 
-    // ✅ Build items
+    // Build invoice items
     const items = [];
-    if (booking.prebookingServices?.length) {
-      booking.prebookingServices.forEach((service, index) => {
-        items.push({
-          description: `Prebooking ${index} - ${service.name}`,
-          amount: index === 0 ? booking.prebookingBookingPrice || 0 : 0,
-        });
-      });
-    }
-    if (booking.upsells?.length) {
-      booking.upsells.forEach((upsell, index) => {
-        upsell.services?.forEach((service) => {
-          items.push({
-            description: `Upsell ${index} - ${service.name}`,
-            amount: upsell.upsellPrice || 0,
-          });
-        });
-      });
-    }
 
-    // ✅ Totals
-    const subtotal = items.reduce((sum, i) => sum + i.amount, 0);
-    const afterDiscount = subtotal - discountAmount;
+    booking.prebookingServices?.forEach((service, index) => {
+      items.push({
+        description: `Prebooking ${index + 1} - ${service.name}`,
+        amount: index === 0 ? Number(booking.prebookingBookingPrice || 0) : 0,
+      });
+    });
+
+    booking.upsells?.forEach((upsell, index) => {
+      upsell.services?.forEach((service) => {
+        items.push({
+          description: `Upsell ${index + 1} - ${service.name}`,
+          amount: Number(upsell.upsellPrice || 0),
+        });
+      });
+    });
+
+    // Calculate totals
+    const subtotal = items.reduce((sum, i) => sum + Number(i.amount || 0), 0);
+    const afterDiscount = subtotal - Number(discountAmount || 0);
     const finalTotal = vatIncluded ? afterDiscount * 1.2 : afterDiscount;
 
-    // ✅ Check if invoice exists
+    // Check for existing invoice
     let invoice = await Invoice.findOne({ booking: booking._id });
     if (invoice) {
-      // 🔄 Update existing invoice (keep old invoiceNo)
       invoice.customerName = booking.ownerName;
       invoice.contactNo = booking.ownerNumber;
       invoice.email = booking.ownerEmail;
@@ -117,7 +104,6 @@ export const generateInvoiceByBookingId = async (req, res) => {
       return res.status(200).json(invoice);
     }
 
-    // 🆕 Create new invoice if none exists
     const invoiceNo = await generateInvoiceNo();
     invoice = await Invoice.create({
       booking: booking._id,
@@ -140,40 +126,27 @@ export const generateInvoiceByBookingId = async (req, res) => {
     res.status(201).json(invoice);
   } catch (err) {
     console.error("Generate invoice error:", err);
-    res
-      .status(500)
-      .json({ message: "Failed to generate invoice", error: err.message });
+    res.status(500).json({ message: "Failed to generate invoice", error: err.message });
   }
 };
 
 // -----------------------------
 // 📌 Get Invoice by Booking ID
-// → fetch if exists, regenerate if missing
 // -----------------------------
 export const getInvoiceByBookingId = async (req, res) => {
   try {
     const { bookingId } = req.params;
-
-    if (!bookingId) {
-      return res.status(400).json({ message: "Booking ID is required" });
-    }
+    if (!bookingId) return res.status(400).json({ message: "Booking ID is required" });
 
     let invoice = await Invoice.findOne({ booking: bookingId }).lean();
-    if (invoice) {
-      return res.status(200).json(invoice);
-    }
+    if (invoice) return res.status(200).json(invoice);
 
-    // ✅ If missing → generate
     return await generateInvoiceByBookingId(req, res);
   } catch (err) {
     console.error("Get invoice error:", err);
-    res.status(500).json({
-      message: "Failed to fetch invoice",
-      error: err.message,
-    });
+    res.status(500).json({ message: "Failed to fetch invoice", error: err.message });
   }
 };
-
 
 // -----------------------------
 // 🧾 Get All Invoices
@@ -197,6 +170,7 @@ export const getAllInvoices = async (req, res) => {
         { makeModel: regex },
       ];
     }
+
     if (fromDate || toDate) {
       filter.invoiceDate = {};
       if (fromDate) filter.invoiceDate.$gte = new Date(fromDate);
@@ -206,9 +180,8 @@ export const getAllInvoices = async (req, res) => {
         filter.invoiceDate.$lte = to;
       }
     }
-    if (status) {
-      filter.status = status;
-    }
+
+    if (status) filter.status = status;
 
     const totalInvoices = await Invoice.countDocuments(filter);
     const invoices = await Invoice.find(filter)
@@ -217,10 +190,7 @@ export const getAllInvoices = async (req, res) => {
       .limit(limit)
       .lean();
 
-    const invoicesWithRowNumber = invoices.map((inv, idx) => ({
-      ...inv,
-      rowNumber: skip + idx + 1,
-    }));
+    const invoicesWithRowNumber = invoices.map((inv, idx) => ({ ...inv, rowNumber: skip + idx + 1 }));
 
     res.status(200).json({
       data: invoicesWithRowNumber,
@@ -246,7 +216,6 @@ export const updateInvoice = async (req, res) => {
   try {
     const { invoiceId } = req.params;
     const { items, discountAmount = 0, vatIncluded = false, status } = req.body || {};
-
     if (!invoiceId) return res.status(400).json({ message: "Invoice ID is required" });
 
     const invoice = await Invoice.findById(invoiceId);
@@ -262,20 +231,19 @@ export const updateInvoice = async (req, res) => {
     invoice.postalCode = booking.ownerPostalCode;
 
     if (Array.isArray(items)) {
-      invoice.items = items.map(item => ({
+      invoice.items = items.map((item) => ({
         description: item.description,
-        amount: item.amount,
+        amount: Number(item.amount || 0),
       }));
     }
 
-    invoice.discountAmount = discountAmount;
+    invoice.discountAmount = Number(discountAmount);
     invoice.vatIncluded = vatIncluded;
     if (status) invoice.status = status;
 
-    const subtotal = invoice.items.reduce((sum, i) => sum + i.amount, 0);
+    const subtotal = invoice.items.reduce((sum, i) => sum + Number(i.amount || 0), 0);
     const afterDiscount = subtotal - invoice.discountAmount;
-    const rawTotal = invoice.vatIncluded ? afterDiscount * 1.2 : afterDiscount;
-    invoice.totalAmount = Math.ceil(rawTotal * 100) / 100;
+    invoice.totalAmount = vatIncluded ? afterDiscount * 1.2 : afterDiscount;
 
     await invoice.save();
     res.status(200).json(invoice);
@@ -290,21 +258,14 @@ export const updateInvoice = async (req, res) => {
 // -----------------------------
 const generateInvoicePdf = (invoice, res, disposition = "inline", isProforma = false) => {
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader(
-    "Content-Disposition",
-    `${disposition}; filename=${invoice.invoiceNo || "invoice"}.pdf`
-  );
+  res.setHeader("Content-Disposition", `${disposition}; filename=${invoice.invoiceNo || "invoice"}.pdf`);
 
   const doc = new PDFDocument({ margin: 40 });
   doc.pipe(res);
 
   const logoPath = path.join(__dirname, "../public/logo.png");
   try {
-    doc.opacity(0.1)
-      .image(logoPath, doc.page.width / 2 - 150, doc.page.height / 2 - 150, {
-        width: 300,
-      })
-      .opacity(1);
+    doc.opacity(0.1).image(logoPath, doc.page.width / 2 - 150, doc.page.height / 2 - 150, { width: 300 }).opacity(1);
   } catch {
     console.warn("Logo not found, skipping watermark");
   }
@@ -315,10 +276,7 @@ const generateInvoicePdf = (invoice, res, disposition = "inline", isProforma = f
   if (invoice.vatIncluded) doc.text("VAT No: 488627727", { align: "center" });
   doc.moveDown(1);
 
-  doc.font("Helvetica-Bold").fontSize(12).text(
-    isProforma ? "PROFORMA INVOICE" : "CUSTOMER INVOICE",
-    { align: "center" }
-  );
+  doc.font("Helvetica-Bold").fontSize(12).text(isProforma ? "PROFORMA INVOICE" : "CUSTOMER INVOICE", { align: "center" });
   doc.moveDown(0.5);
 
   const startX = 40, tableWidth = 520, rowH = 20;
@@ -326,38 +284,34 @@ const generateInvoicePdf = (invoice, res, disposition = "inline", isProforma = f
 
   const drawCell = (text, x, y, w, h, align = "left", bold = false) => {
     doc.rect(x, y, w, h).stroke();
-    doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(10)
-      .text(text, x + 4, y + 6, { width: w - 8, align });
+    doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(10).text(text, x + 4, y + 6, { width: w - 8, align });
   };
 
   // Invoice info
   drawCell("INVOICE #", startX, y, 130, rowH, "left", true);
   drawCell(invoice.invoiceNo || "—", startX + 130, y, 130, rowH);
   drawCell("Invoice Date", startX + 260, y, 130, rowH, "left", true);
-  drawCell(
-    invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString("en-GB") : "—",
-    startX + 390, y, 170, rowH
-  );
+  drawCell(invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString("en-GB") : "—", startX + 390, y, 170, rowH);
   y += rowH;
 
-  drawCell("Customer Name", startX, y, 130, rowH, "left", true);
+  drawCell("Customer Name", startX, y, 130, rowH, true);
   drawCell(invoice.customerName || "—", startX + 130, y, 130, rowH);
-  drawCell("Contact #", startX + 260, y, 130, rowH, "left", true);
+  drawCell("Contact #", startX + 260, y, 130, rowH, true);
   drawCell(invoice.contactNo || "—", startX + 390, y, 170, rowH);
   y += rowH;
 
-  drawCell("Vehicle Reg", startX, y, 130, rowH, "left", true);
+  drawCell("Vehicle Reg", startX, y, 130, rowH, true);
   drawCell(invoice.vehicleRegNo || "-", startX + 130, y, 130, rowH);
-  drawCell("Make & Model", startX + 260, y, 130, rowH, "left", true);
+  drawCell("Make & Model", startX + 260, y, 130, rowH, true);
   drawCell(invoice.makeModel || "—", startX + 390, y, 170, rowH);
   y += rowH;
 
-  drawCell("Postal Code", startX, y, 130, rowH, "left", true);
+  drawCell("Postal Code", startX, y, 130, rowH, true);
   drawCell(invoice.postalCode || "—", startX + 130, y, 130, rowH);
   y += rowH + 10;
 
   // Items
-  drawCell("Description", startX, y, 300, rowH, "left", true);
+  drawCell("Description", startX, y, 300, rowH, true);
   drawCell("Qty", startX + 300, y, 100, rowH, "center", true);
   drawCell("Amount", startX + 400, y, 160, rowH, "right", true);
   y += rowH;
@@ -413,26 +367,19 @@ const generateInvoicePdf = (invoice, res, disposition = "inline", isProforma = f
 };
 
 // -----------------------------
-// 🧾 View Invoice PDF Inline (stream, no redirect, public access)
+// 🧾 View Invoice PDF Inline
 // -----------------------------
 export const viewInvoicePdf = async (req, res) => {
   try {
     const { invoiceId } = req.params;
     const isProforma = req.query.proforma === "true";
 
-    // fetch invoice
     const invoice = await Invoice.findById(invoiceId).lean();
-    if (!invoice) {
-      return res.status(404).json({ message: "Invoice not found" });
-    }
+    if (!invoice) return res.status(404).json({ message: "Invoice not found" });
 
-    // stream PDF directly to response
     generateInvoicePdf(invoice, res, "inline", isProforma);
   } catch (err) {
-    console.error("Error generating invoice PDF (view):", err);
-    res.status(500).json({
-      message: "Failed to view invoice PDF",
-      error: err.message,
-    });
+    console.error("Error generating invoice PDF:", err);
+    res.status(500).json({ message: "Failed to view invoice PDF", error: err.message });
   }
 };

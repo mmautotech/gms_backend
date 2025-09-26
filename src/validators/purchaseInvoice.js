@@ -1,14 +1,12 @@
 // src/validators/purchaseInvoice.js
 import { z } from "zod";
-import mongoose from "mongoose";
-
-const isValidObjectId = (val) => mongoose.Types.ObjectId.isValid(val);
 
 /**
  * ✅ Purchase Item Schema
+ * Now uses partName instead of ObjectId
  */
 const purchaseItemSchema = z.object({
-    part: z.string().refine(isValidObjectId, { message: "Invalid part ID" }),
+    partName: z.string().min(1, "Part name is required"),
     rate: z
         .number({ required_error: "Rate is required" })
         .min(0, "Rate cannot be negative")
@@ -25,28 +23,14 @@ const purchaseItemSchema = z.object({
  */
 export const createPurchaseInvoiceSchema = z
     .object({
-        supplier: z
-            .string()
-            .refine(isValidObjectId, { message: "Invalid supplier ID" }),
+        supplier: z.string().min(1, "Supplier ID is required"),
+        vehicleRegNo: z.string().min(1, "Vehicle registration number is required"),
+        booking: z.string().optional(), // <-- Booking reference added
         items: z
             .array(purchaseItemSchema)
-            .min(1, "At least one purchase item is required")
-            .refine(
-                (val) => {
-                    const partIds = val.map((i) => i.part);
-                    return partIds.length === new Set(partIds).size;
-                },
-                { message: "Each part must be unique within an invoice" }
-            ),
-        paymentDate: z.coerce.date({
-            required_error: "Payment date is required",
-        }),
-        discount: z
-            .number()
-            .min(0, "Discount cannot be negative")
-            .max(999999, "Discount too large")
-            .optional()
-            .default(0),
+            .min(1, "At least one purchase item is required"),
+        paymentDate: z.coerce.date({ required_error: "Payment date is required" }),
+        discount: z.number().min(0).optional().default(0),
         vatIncluded: z.boolean().optional().default(false),
         vendorInvoiceNumber: z.string().optional(),
         vendorInvoicePhoto: z
@@ -80,7 +64,7 @@ export const updateInvoiceStatusSchema = z.object({
  * ✅ ID param schema
  */
 export const invoiceIdParamSchema = z.object({
-    id: z.string().refine(isValidObjectId, { message: "Invalid invoice ID" }),
+    id: z.string().min(1, "Invoice ID is required"),
 });
 
 /**
@@ -90,19 +74,10 @@ export const invoiceQuerySchema = z.object({
     page: z.coerce.number().min(1).default(1),
     limit: z.coerce.number().min(1).max(100).default(50),
 
-    purchaser: z
-        .string()
-        .refine(isValidObjectId, { message: "Invalid purchaser ID" })
-        .optional(),
-    supplier: z
-        .string()
-        .refine(isValidObjectId, { message: "Invalid supplier ID" })
-        .optional(),
-    part: z
-        .string()
-        .refine(isValidObjectId, { message: "Invalid part ID" })
-        .optional(),
-    partNumber: z.string().optional(),
+    purchaser: z.string().optional(),
+    supplier: z.string().optional(),
+    booking: z.string().optional(), // <-- filter by booking
+    partName: z.string().optional(),
 
     status: z.enum(["Paid", "Partial", "Pending"]).optional(),
     vatIncluded: z

@@ -50,7 +50,7 @@ export async function login(req, res) {
 export async function register(req, res) {
     try {
         const { username, password, userType } = req.body || {};
-        const requestingUser = req.user; // assume JWT middleware sets req.user
+        const requestingUser = req.user; // JWT middleware sets req.user
 
         if (!username || !password || !userType) {
             return res.status(400).json({ error: "Missing fields" });
@@ -61,7 +61,7 @@ export async function register(req, res) {
             return res.status(400).json({ error: `Invalid userType. Allowed: ${allowedRoles.join(", ")}` });
         }
 
-        // 🔹 Restrict creating admin
+        // Only admins can create another admin
         if (userType === "admin" && requestingUser.userType !== "admin") {
             return res.status(403).json({ error: "Only admins can create another admin" });
         }
@@ -106,18 +106,60 @@ export async function forgotPassword(req, res) {
         const resetToken = crypto.randomBytes(4).toString("hex"); // short token
         const resetTokenHash = await bcrypt.hash(resetToken, 10);
 
-        // Save token temporarily in user (or a separate collection in production)
+        // Save token temporarily in user
         user.resetToken = resetTokenHash;
         user.resetTokenExpiry = Date.now() + 3600000; // 1 hour
         await user.save();
 
-        // Instead of sending email, return the token in response
+        // Return token (for demo; normally you'd email it)
         res.json({
             message: `Password reset token generated for username ${username}`,
             resetToken
         });
     } catch (err) {
         console.error("Forgot password error:", err);
+        res.status(500).json({ error: "Internal server error" });
+    }
+}
+
+/** -------------------------
+ * Admin changes any user's password
+ ------------------------- */
+export async function adminChangePassword(req, res) {
+    try {
+        const { username, newPassword } = req.body;
+        const requestingUser = req.user; // JWT middleware sets req.user
+
+        if (!username || !newPassword) {
+            return res.status(400).json({ error: "Missing fields" });
+        }
+
+        // Only admins can change passwords
+        if (requestingUser.userType !== "admin") {
+            return res.status(403).json({ error: "Only admins can change passwords" });
+        }
+
+        const user = await User.findOne({ username });
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        user.passwordHash = await bcrypt.hash(newPassword, 10);
+        await user.save();
+
+        res.json({ message: `Password for ${username} updated successfully` });
+    } catch (err) {
+        console.error("Admin change password error:", err);
+        res.status(500).json({ error: "Internal server error" });
+    }
+}
+
+
+export async function getAllUsers(req, res) {
+    try {
+        // Only admins can call this
+        const users = await User.find({}, "username userType").sort({ username: 1 });
+        res.json({ users });
+    } catch (err) {
+        console.error("Get all users error:", err);
         res.status(500).json({ error: "Internal server error" });
     }
 }

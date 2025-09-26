@@ -1,6 +1,6 @@
 import express from "express";
 import { requireAuth, requireRole } from "../middleware/auth.js";
-import { validateWithZod } from "../middleware/zodMiddleware.js"; // ✅ fixed typo
+import { validateWithZod } from "../middleware/zodMiddleware.js";
 
 import {
     createPurchaseInvoiceSchema,
@@ -14,7 +14,6 @@ import * as purchaseController from "../controllers/purchaseInvoiceController.js
 
 const router = express.Router();
 
-// 🔒 All routes require authentication
 router.use(requireAuth);
 
 // --- User routes ---
@@ -43,7 +42,7 @@ router.patch(
     purchaseController.updateMyInvoiceStatus
 );
 
-// --- Admin-only routes ---
+// --- Admin routes ---
 router.get(
     "/",
     requireRole("admin"),
@@ -67,12 +66,6 @@ router.delete(
 );
 
 
-// --- Download Purchase Invoice PDF ---
-router.get(
-    "/:id/download",
-    validateWithZod(invoiceIdParamSchema, "params"),
-    purchaseController.downloadPurchaseInvoicePdf
-);
 
 
 export default router;
