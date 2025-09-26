@@ -65,7 +65,7 @@ router.get(
   getAllPendingBookings
 );
 
-// 👇 NEW: List arrived bookings only
+// List arrived bookings only
 router.get(
   "/arrived",
   validateWithZod(listArrivedBookingsQuerySchema, "query"), // reuse validation

@@ -1,91 +1,146 @@
-import mongoose from "mongoose";
+// src/controllers/booking/getAllArrivedBookings.js
 import Booking from "../../models/Booking.js";
 import { sendError } from "../../utils/errorHandler.js";
 
-/**
- * Get all arrived bookings with pagination
- */
 export const getAllArrivedBookings = async (req, res) => {
     try {
+        // Always arrived
+        const filter = { status: "arrived" };
+
         let {
             page = 1,
             limit = 25,
-            sortBy = "arrivedAt",
-            sortDir = "desc",
+            sortBy = "createdDate",
+            sortDir,
             fromDate,
             toDate,
             search,
             services,
+            user,
         } = req.query;
 
-        // Sanitize page and limit
-        page = Math.max(1, Number(page) || 1);
-        limit = Math.min(100, Math.max(1, Number(limit) || 25));
+        // 📌 Pagination
+        limit = Number(limit);
+        const allowedLimits = [5, 25, 50, 100];
+        if (!allowedLimits.includes(limit)) limit = 25;
+
+        page = Number(page);
         const skip = (page - 1) * limit;
-        const sortOrder = sortDir?.toLowerCase() === "asc" ? 1 : -1;
 
-        // Whitelist allowed sort fields
-        const allowedSortFields = ["arrivedAt", "createdAt", "scheduledDate", "vehicleRegNo"];
-        if (!allowedSortFields.includes(sortBy)) sortBy = "arrivedAt";
+        // 📌 Sorting
+        const SORT_FIELD_MAP = {
+            createdDate: "createdAt",
+            scheduledDate: "scheduledDate",
+            arrivedDate: "arrivedAt",
+            cancelledDate: "cancelledAt",
+            completedDate: "completedAt",
+            vehicleRegNo: "vehicleRegNo",
+            makeModel: "makeModel",
+            ownerPostalCode: "ownerPostalCode",
+            ownerNumber: "ownerNumber",
+        };
+        const dbSortField = SORT_FIELD_MAP[sortBy] || "arrivedAt";
 
-        const filter = { status: "arrived" };
+        const isDateField = ["createdAt", "scheduledDate", "arrivedAt"].includes(dbSortField);
+        const sortOrder = sortDir
+            ? sortDir.toLowerCase() === "asc"
+                ? 1
+                : -1
+            : isDateField
+                ? -1
+                : 1;
 
-        // Date range filter
+        // 📌 Date filtering
         if (fromDate || toDate) {
-            filter.arrivedAt = {};
-            if (fromDate) filter.arrivedAt.$gte = new Date(fromDate);
+            const dateField =
+                dbSortField === "scheduledDate"
+                    ? "scheduledDate"
+                    : dbSortField === "createdAt"
+                        ? "createdAt"
+                        : "arrivedAt";
+            filter[dateField] = {};
+            if (fromDate) filter[dateField].$gte = new Date(fromDate);
             if (toDate) {
                 const to = new Date(toDate);
                 to.setHours(23, 59, 59, 999);
-                filter.arrivedAt.$lte = to;
+                filter[dateField].$lte = to;
             }
         }
 
-        // Search filter
+        // 📌 Search (regex across multiple fields)
         if (search) {
-            const regex = new RegExp(search.trim(), "i");
+            const regex = new RegExp(search, "i");
             filter.$or = [
                 { vehicleRegNo: regex },
                 { makeModel: regex },
                 { ownerName: regex },
                 { ownerEmail: regex },
                 { ownerNumber: regex },
-                { remarks: regex },
+                { ownerPostalCode: regex },
             ];
         }
 
-        // Services filter
-        let serviceIds = [];
+        // 📌 Services filter
         if (services) {
-            serviceIds = String(services)
-                .split(",")
-                .map((id) => id.trim())
-                .filter((id) => mongoose.Types.ObjectId.isValid(id));
-            if (serviceIds.length > 0) filter.services = { $in: serviceIds };
+            const ids = String(services).split(",").map((id) => id.trim());
+            filter.services = { $in: ids };
         }
 
-        // Get total count
+        // 📌 User filter (match createdBy OR arrivedBy)
+        if (user) {
+            filter.$or = filter.$or || [];
+            filter.$or.push({ createdBy: user }, { arrivedBy: user });
+        }
+
+        // 📌 Query
         const total = await Booking.countDocuments(filter);
 
-        // Get bookings with fallback sort (arrivedAt desc, then createdAt desc)
         const bookings = await Booking.find(filter)
-            .populate("createdBy", "username") // populate username only
-            .select("-bookingConfirmationPhoto") // remove photo from response
-            .sort({ [sortBy]: sortOrder, createdAt: -1 })
+            .select(
+                "createdAt arrivedAt vehicleRegNo makeModel ownerName ownerEmail ownerNumber ownerPostalCode bookingPrice createdBy arrivedBy services"
+            )
+            .populate([
+                { path: "createdBy", select: "username" },
+                { path: "arrivedBy", select: "username" },
+                { path: "services", select: "name" },
+            ])
+            .sort({ [dbSortField]: sortOrder })
             .skip(skip)
             .limit(limit)
             .lean();
 
-        // Add rowNumber
+        // 📌 Transform
         const data = bookings.map((b, index) => ({
-            ...b,
-            _id: b._id.toString(),
+            id: b._id,
             rowNumber: skip + index + 1,
+            bookingDate: b.createdAt,
+            bookedBy: b.createdBy?.username ?? null,
+            arrivalDate: b.arrivedAt,
+            arrivedBy: b.arrivedBy?.username ?? null,
+            registration: b.vehicleRegNo,
+            makeModel: b.makeModel,
+            ownerName: b.ownerName,
+            email: b.ownerEmail,
+            phoneNumber: b.ownerNumber,
+            postCode: b.ownerPostalCode,
+            bookingPrice: b.bookingPrice,
+            services: b.services?.map((s) => s.name) || [],
         }));
 
+        // 📌 Response
         res.json({
             success: true,
-            data,
+            params: {
+                search: search || undefined,
+                fromDate: fromDate || undefined,
+                toDate: toDate || undefined,
+                services: services || undefined,
+                user: user || undefined,
+                sortBy,
+                sortDir: sortDir || (isDateField ? "desc" : "asc"),
+                perPage: limit,
+                page,
+            },
             pagination: {
                 total,
                 page,
@@ -94,14 +149,10 @@ export const getAllArrivedBookings = async (req, res) => {
                 hasNextPage: page * limit < total,
                 hasPrevPage: page > 1,
             },
-            meta: {
-                sortBy,
-                sortDir,
-                appliedFilters: { fromDate, toDate, search, services: serviceIds },
-            },
+            data,
         });
-    } catch (err) {
-        console.error("Get Arrived Bookings Error:", err);
-        sendError(res, 500, err.message);
+    } catch (error) {
+        console.error("Get All Arrived Bookings Error:", error);
+        sendError(res, 500, error.message);
     }
 };

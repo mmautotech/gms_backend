@@ -118,23 +118,17 @@ export const listArrivedBookingsQuerySchema = z.object({
         })
         .optional(),
 
-    status: z
-        .preprocess((v) => (typeof v === "string" ? v.toLowerCase() : v),
-            z.enum(["pending", "arrived", "completed", "cancelled"])
-        )
-        .optional(),
-
-    // ✅ include createdDate
+    // ✅ Sorting options
     sortBy: z.enum([
-        "createdDate",
-        "scheduledDate",
-        "arrivedDate",
-        "cancelledDate",
-        "completedDate",
-        "vehicleRegNo",
-        "makeModel",
-        "ownerPostalCode",
-        "ownerNumber",
+        "createdDate",    // bookingDate
+        "arrivedDate",    // arrivedAt
+        "vehicleRegNo",   // registration
+        "makeModel",      // make & model
+        "ownerName",      // owner
+        "ownerEmail",     // email
+        "ownerNumber",    // phone
+        "ownerPostalCode",// postcode
+        "bookingPrice",   // price
     ]).optional(),
     sortDir: z.enum(["asc", "desc"]).optional(),
 
@@ -148,10 +142,14 @@ export const listArrivedBookingsQuerySchema = z.object({
         .regex(/^[a-f\d]{24}(,[a-f\d]{24})*$/i, "Invalid MongoDB ObjectId(s)")
         .optional(),
 
+    // ✅ Additional filters
     vehicleRegNo: z.string().optional(),
     ownerName: z.string().optional(),
+    ownerEmail: z.string().optional(),
+    ownerNumber: z.string().optional(),
     ownerPostalCode: z.string().optional(),
     source: z.string().optional(),
+    user: z.string().optional(), // createdBy
 });
 
 // -----------------------------
