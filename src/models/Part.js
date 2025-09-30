@@ -1,4 +1,3 @@
-// models/Part.js
 import mongoose from "mongoose";
 
 const PartSchema = new mongoose.Schema(
@@ -10,7 +9,7 @@ const PartSchema = new mongoose.Schema(
         },
         partNumber: {
             type: String,
-            default: null, // allow missing/nullable
+            default: null,
             trim: true,
         },
         price: {
@@ -18,11 +17,6 @@ const PartSchema = new mongoose.Schema(
             required: [true, "Price is required"],
             min: [0, "Price cannot be negative"],
             set: (v) => Number(v.toFixed(2)), // enforce 2 decimal places
-        },
-        supplier: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Supplier",
-            required: [true, "Supplier reference is required"],
         },
         description: {
             type: String,
@@ -38,11 +32,10 @@ const PartSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
-// ✅ Compound unique index for (partName + partNumber)
-// Ensures only one combination can exist
+// ✅ Unique index on partName + partNumber
 PartSchema.index({ partName: 1, partNumber: 1 }, { unique: true });
 
-// Text index for search
+// ✅ Text index for search
 PartSchema.index({
     partName: "text",
     partNumber: "text",

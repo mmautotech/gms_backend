@@ -1,7 +1,7 @@
 // routes/partsRoutes.js
 import express from "express";
 import { requireAuth, requireRole } from "../middleware/auth.js";
-import { validateWithZod } from "../middleware/zodMiddlewaree.js";
+import { validateWithZod } from "../middleware/zodMiddleware.js";
 
 import {
     partIdParamSchema,
@@ -19,6 +19,7 @@ router.use(requireAuth);
 
 // 🔍 Accessible to ALL authenticated users
 router.get("/", validateWithZod(partQuerySchema, "query"), partsController.getParts);
+router.get("/dropdown", partsController.getPartsDropdown);
 router.get("/:id", validateWithZod(partIdParamSchema, "params"), partsController.getPartById);
 
 // ✏️ Create Part → now allowed for ALL users

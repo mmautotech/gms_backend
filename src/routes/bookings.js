@@ -20,6 +20,7 @@ import {
   getAllPendingBookings,
   getBookingById,
   getBookingPhoto,
+  getBookingIdMap,
   updateBooking,
   updateBookingStatus,
   exportBookings,
@@ -72,6 +73,9 @@ router.get(
   getAllArrivedBookings
 );
 
+// List all booking IDs with labels (makeModel + registration)
+router.get("/booking-map", getBookingIdMap);
+
 // Get single booking
 router.get(
   "/:id",
@@ -105,5 +109,7 @@ router.patch(
   validateWithZod(updateBookingStatusBodySchema),
   updateBookingStatus
 );
+
+
 
 export default router;

@@ -1,6 +1,4 @@
-// controllers/partsController.js
 import Part from "../models/Part.js";
-import Supplier from "../models/Supplier.js";
 
 /**
  * Centralized error handler
@@ -34,13 +32,7 @@ const checkDuplicate = async (partName, partNumber, excludeId = null) => {
  */
 export const createPart = async (req, res) => {
     try {
-        const { supplier, partName, partNumber } = req.body;
-
-        // Ensure supplier exists
-        const supplierExists = await Supplier.findById(supplier);
-        if (!supplierExists) {
-            return res.status(400).json({ success: false, error: "Supplier not found" });
-        }
+        const { partName, partNumber } = req.body;
 
         // Check duplicate
         if (await checkDuplicate(partName, partNumber)) {
@@ -71,13 +63,13 @@ export const getParts = async (req, res) => {
             } else if (!includeInactive) {
                 filter.isActive = true;
             }
-            // includeInactive=true → no filter → admin sees all
+            // includeInactive=true → admin sees all
         } else {
             filter.isActive = true; // normal users only see active
         }
 
         const [parts, total, activeCount, inactiveCount] = await Promise.all([
-            Part.find(filter).populate("supplier", "name contact email").lean(),
+            Part.find(filter).lean(),
             Part.countDocuments(),
             Part.countDocuments({ isActive: true }),
             Part.countDocuments({ isActive: false }),
@@ -98,13 +90,11 @@ export const getParts = async (req, res) => {
 };
 
 /**
- * ✅ Get part by ID (independent of status)
+ * ✅ Get part by ID
  */
 export const getPartById = async (req, res) => {
     try {
-        const part = await Part.findById(req.params.id)
-            .populate("supplier", "name contact email")
-            .lean();
+        const part = await Part.findById(req.params.id).lean();
 
         if (!part) {
             return res.status(404).json({ success: false, error: "Part not found" });
@@ -117,7 +107,7 @@ export const getPartById = async (req, res) => {
 };
 
 /**
- * ✅ Update part (independent of status)
+ * ✅ Update part
  */
 export const updatePart = async (req, res) => {
     try {
@@ -135,9 +125,7 @@ export const updatePart = async (req, res) => {
         const part = await Part.findByIdAndUpdate(req.params.id, req.body, {
             new: true,
             runValidators: true,
-        })
-            .populate("supplier", "name contact email")
-            .lean();
+        }).lean();
 
         if (!part) {
             return res.status(404).json({ success: false, error: "Part not found" });
@@ -175,7 +163,7 @@ export const deactivatePart = async (req, res) => {
 };
 
 /**
- * ✅ Restore (activate)
+ * ✅ Reactivate
  */
 export const activatePart = async (req, res) => {
     try {
@@ -196,5 +184,28 @@ export const activatePart = async (req, res) => {
         });
     } catch (error) {
         return handleError(error, res);
+    }
+};
+
+/**
+ * ✅ Dropdown mapping (id + label)
+ */
+export const getPartsDropdown = async (req, res) => {
+    try {
+        const parts = await Part.find({ isActive: true })
+            .select("partName partNumber")
+            .sort({ partName: 1 })
+            .lean();
+
+        const mapped = parts.map((p) => ({
+            id: p._id,
+            label: p.partNumber
+                ? `${p.partName} (${p.partNumber})`
+                : p.partName,
+        }));
+
+        return res.json({ success: true, data: mapped });
+    } catch (error) {
+        return res.status(500).json({ success: false, error: error.message });
     }
 };

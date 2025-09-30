@@ -1,4 +1,3 @@
-// validators/part.js
 import { z } from "zod";
 import mongoose from "mongoose";
 
@@ -30,10 +29,6 @@ export const createPartBodySchema = z
                     message: "Price can have up to two decimal places",
                 })
         ),
-
-        supplier: z.string().refine((val) => isValidObjectId(val), {
-            message: "Invalid supplier ID",
-        }),
 
         description: z.preprocess(
             (val) => (typeof val === "string" ? val.trim() : val),

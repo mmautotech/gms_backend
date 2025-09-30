@@ -1,3 +1,4 @@
+// src/routes/purchaseInvoice.js
 import express from "express";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { validateWithZod } from "../middleware/zodMiddleware.js";
@@ -10,30 +11,19 @@ import {
     invoiceQuerySchema,
 } from "../validators/purchaseInvoice.js";
 
-import * as purchaseController from "../controllers/purchaseInvoiceController.js";
+import * as purchaseController from "../controllers/purchase/index.js";
 
 const router = express.Router();
 
+// 🔐 All routes require authentication
 router.use(requireAuth);
 
 // --- User routes ---
-router.post(
-    "/",
-    validateWithZod(createPurchaseInvoiceSchema, "body"),
-    purchaseController.createPurchaseInvoice
-);
+router.post("/", validateWithZod(createPurchaseInvoiceSchema, "body"), purchaseController.createPurchaseInvoice);
 
-router.get(
-    "/my",
-    validateWithZod(invoiceQuerySchema, "query"),
-    purchaseController.getMyInvoices
-);
+router.get("/my", validateWithZod(invoiceQuerySchema, "query"), purchaseController.getMyInvoices);
 
-router.get(
-    "/:id",
-    validateWithZod(invoiceIdParamSchema, "params"),
-    purchaseController.getPurchaseInvoiceById
-);
+router.get("/:id", validateWithZod(invoiceIdParamSchema, "params"), purchaseController.getPurchaseInvoiceById);
 
 router.patch(
     "/:id/status",
@@ -43,12 +33,7 @@ router.patch(
 );
 
 // --- Admin routes ---
-router.get(
-    "/",
-    requireRole("admin"),
-    validateWithZod(invoiceQuerySchema, "query"),
-    purchaseController.getAllInvoices
-);
+router.get("/", requireRole("admin"), validateWithZod(invoiceQuerySchema, "query"), purchaseController.getAllInvoices);
 
 router.put(
     "/:id",
@@ -64,8 +49,5 @@ router.delete(
     validateWithZod(invoiceIdParamSchema, "params"),
     purchaseController.deletePurchaseInvoice
 );
-
-
-
 
 export default router;
