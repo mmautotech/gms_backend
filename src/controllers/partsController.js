@@ -63,7 +63,6 @@ export const getParts = async (req, res) => {
             } else if (!includeInactive) {
                 filter.isActive = true;
             }
-            // includeInactive=true → admin sees all
         } else {
             filter.isActive = true; // normal users only see active
         }
@@ -199,9 +198,7 @@ export const getPartsDropdown = async (req, res) => {
 
         const mapped = parts.map((p) => ({
             id: p._id,
-            label: p.partNumber
-                ? `${p.partName} (${p.partNumber})`
-                : p.partName,
+            label: p.partNumber ? `${p.partName} (${p.partNumber})` : p.partName,
         }));
 
         return res.json({ success: true, data: mapped });
