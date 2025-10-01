@@ -97,7 +97,7 @@ export const getAllArrivedBookings = async (req, res) => {
 
         const bookings = await Booking.find(filter)
             .select(
-                "createdAt arrivedAt vehicleRegNo makeModel ownerName ownerEmail ownerNumber ownerPostalCode bookingPrice createdBy arrivedBy services"
+                "createdAt arrivedAt vehicleRegNo makeModel ownerName ownerEmail ownerNumber ownerPostalCode bookingPrice createdBy arrivedBy services remarks source"
             )
             .populate([
                 { path: "createdBy", select: "username" },
@@ -125,6 +125,10 @@ export const getAllArrivedBookings = async (req, res) => {
             postCode: b.ownerPostalCode,
             bookingPrice: b.bookingPrice,
             services: b.services?.map((s) => s.name) || [],
+
+            // ✅ new fields
+            remarks: b.remarks ?? null,
+            source: b.source ?? null,
         }));
 
         // 📌 Response

@@ -40,7 +40,7 @@ export const getAllBookings = async (req, res) => {
         };
         const dbSortField = SORT_FIELD_MAP[sortBy] ?? "createdAt";
 
-        // 📌 Default sort direction (dates → desc, others → asc)
+        // 📌 Default sort direction
         const DATE_FIELDS = new Set([
             "createdDate",
             "scheduledDate",
@@ -110,14 +110,17 @@ export const getAllBookings = async (req, res) => {
         const total = await Booking.countDocuments(filter);
 
         const projection = `
-      createdAt createdBy scheduledDate
+      createdAt updatedAt createdBy updatedBy scheduledDate
       cancelledAt cancelledBy
       arrivedAt arrivedBy
       completedAt completedBy
-      status
+      status source
       vehicleRegNo makeModel ownerName ownerAddress
       ownerPostalCode ownerEmail ownerNumber remarks
       services labourCost partsCost bookingPrice
+      prebookingServices prebookingLabourCost prebookingPartsCost prebookingBookingPrice
+      bookingConfirmationPhoto bookingConfirmationPhotoCompressed bookingConfirmationPhotoType
+      parts upsells
     `;
 
         const SLIM_POPULATE = [
@@ -126,6 +129,7 @@ export const getAllBookings = async (req, res) => {
             { path: "cancelledBy", select: "username" },
             { path: "completedBy", select: "username" },
             { path: "services", select: "name" },
+            { path: "prebookingServices", select: "name" },
         ];
 
         const bookings = await Booking.find(filter)
@@ -140,30 +144,57 @@ export const getAllBookings = async (req, res) => {
         const data = bookings.map((b, index) => ({
             id: b._id.toString(),
             rowNumber: skip + index + 1,
-            createdDate: b.createdAt,
+
+            bookingDate: b.createdAt,
+            updatedDate: b.updatedAt ?? null,
             scheduledDate: b.scheduledDate,
-            createdBy: b.createdBy?.username ?? null,
+            bookedBy: b.createdBy?.username ?? null,
+            updatedBy: b.updatedBy ?? null,
             cancelledDate: b.cancelledAt ?? null,
             cancelledBy: b.cancelledBy?.username ?? null,
-            arrivedDate: b.arrivedAt ?? null,
+            arrivalDate: b.arrivedAt ?? null,
             arrivedBy: b.arrivedBy?.username ?? null,
             completedDate: b.completedAt ?? null,
             completedBy: b.completedBy?.username ?? null,
             status: b.status,
-            vehicleRegNo: b.vehicleRegNo,
+
+            registration: b.vehicleRegNo,
             makeModel: b.makeModel,
             ownerName: b.ownerName,
             ownerAddress: b.ownerAddress,
-            ownerPostalCode: b.ownerPostalCode,
-            ownerEmail: b.ownerEmail,
-            ownerNumber: b.ownerNumber,
-            remarks: b.remarks,
+            postCode: b.ownerPostalCode,
+            email: b.ownerEmail,
+            phoneNumber: b.ownerNumber,
+
+            remarks: b.remarks ?? null,
+            source: b.source ?? null,
+
+            // ✅ Prebooking info
+            prebookingServices: Array.isArray(b.prebookingServices)
+                ? b.prebookingServices.map((s) => s?.name || s.toString())
+                : [],
+            prebookingLabourCost: b.prebookingLabourCost ?? 0,
+            prebookingPartsCost: b.prebookingPartsCost ?? 0,
+            prebookingBookingPrice: b.prebookingBookingPrice ?? 0,
+
+            // ✅ Services after arrival
             services: Array.isArray(b.services)
                 ? b.services.map((s) => s?.name).filter(Boolean)
                 : [],
-            labourCost: b.labourCost,
-            partsCost: b.partsCost,
-            bookingPrice: b.bookingPrice,
+            parts: b.parts ?? [],
+            upsells: b.upsells ?? [],
+
+            labourCost: b.labourCost ?? 0,
+            partsCost: b.partsCost ?? 0,
+            bookingPrice: b.bookingPrice ?? 0,
+
+            // ✅ Photos (convert binary buffer → base64 string)
+            bookingConfirmationPhoto: b.bookingConfirmationPhoto
+                ? `data:${b.bookingConfirmationPhotoType};base64,${b.bookingConfirmationPhoto.toString("base64")}`
+                : null,
+            bookingConfirmationPhotoCompressed: b.bookingConfirmationPhotoCompressed
+                ? `data:${b.bookingConfirmationPhotoType};base64,${b.bookingConfirmationPhotoCompressed.toString("base64")}`
+                : null,
         }));
 
         // 📌 Response
