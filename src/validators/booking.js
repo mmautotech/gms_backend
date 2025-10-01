@@ -32,46 +32,48 @@ export const createBookingSchema = z.object({
 // -----------------------------
 export const listBookingsQuerySchema = z.object({
     page: z.coerce.number().min(1).optional(),
-    limit: z
-        .coerce.number()
-        .refine((val) => [5, 25, 50, 100].includes(val), {
-            message: "Limit must be one of [5, 25, 50, 100]",
-        })
-        .optional(),
+    limit: z.coerce.number().refine((val) => [5, 25, 50, 100].includes(val), {
+        message: "Limit must be one of [5, 25, 50, 100]",
+    }).optional(),
 
-    status: z
-        .preprocess((v) => (typeof v === "string" ? v.toLowerCase() : v),
-            z.enum(["pending", "arrived", "completed", "cancelled"])
-        )
-        .optional(),
+    status: z.preprocess(
+        (v) => (typeof v === "string" ? v.toLowerCase() : v),
+        z.enum(["pending", "arrived", "completed", "cancelled"])
+    ).optional(),
 
     sortBy: z.enum([
         "createdDate",
         "scheduledDate",
-        "arrivedAt",
-        "cancelledAt",
-        "completedAt",
+        "arrivedDate", "arrivedAt",
+        "cancelledDate", "cancelledAt",
+        "completedDate", "completedAt",
         "vehicleRegNo",
         "makeModel",
         "ownerPostalCode",
         "ownerNumber",
     ]).optional(),
+
     sortDir: z.enum(["asc", "desc"]).optional(),
 
     fromDate: z.coerce.date().optional(),
     toDate: z.coerce.date().optional(),
-
     search: z.string().optional(),
 
-    services: z
-        .string()
+    services: z.string()
         .regex(/^[a-f\d]{24}(,[a-f\d]{24})*$/i, "Invalid MongoDB ObjectId(s)")
         .optional(),
 
     vehicleRegNo: z.string().optional(),
+    makeModel: z.string().optional(),
     ownerName: z.string().optional(),
+    ownerEmail: z.string().optional(),
+    ownerNumber: z.string().optional(),
     ownerPostalCode: z.string().optional(),
+    remarks: z.string().optional(),
     source: z.string().optional(),
+
+    // ✅ filter by system user (createdBy / updatedBy)
+    user: objectId.optional(),
 });
 
 // -----------------------------

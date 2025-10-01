@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import Booking from "../../models/Booking.js";
-import { Parser } from "json2csv";   // ✅ install this: npm i json2csv
+import { Parser } from "json2csv";   // npm i json2csv
 
 // Allowed status values
 const ALLOWED_STATUS = new Set(["pending", "arrived", "completed", "cancelled"]);
@@ -15,30 +15,37 @@ export const exportBookings = async (req, res) => {
             toDate,
             search,
             services,
+            user, // ✅ added
         } = req.query;
 
-        // Sorting map
+        // Sorting map (accept both frontend and backend naming)
         const SORT_FIELD_MAP = {
             createdDate: "createdAt",
             scheduledDate: "scheduledDate",
             arrivedDate: "arrivedAt",
+            arrivedAt: "arrivedAt",
             cancelledDate: "cancelledAt",
+            cancelledAt: "cancelledAt",
             completedDate: "completedAt",
+            completedAt: "completedAt",
             vehicleRegNo: "vehicleRegNo",
             makeModel: "makeModel",
             ownerPostalCode: "ownerPostalCode",
             ownerNumber: "ownerNumber",
         };
-        const dbSortField = SORT_FIELD_MAP[sortBy] ?? SORT_FIELD_MAP.createdDate;
+        const dbSortField = SORT_FIELD_MAP[sortBy] ?? "createdAt";
 
         const DATE_FIELDS = new Set([
             "createdDate",
             "scheduledDate",
             "arrivedDate",
+            "arrivedAt",
             "cancelledDate",
+            "cancelledAt",
             "completedDate",
+            "completedAt",
         ]);
-        const userProvidedSortDir = typeof req.query.sortDir !== "undefined";
+        const userProvidedSortDir = typeof sortDir !== "undefined";
         const effectiveSortDir = userProvidedSortDir
             ? String(sortDir).toLowerCase()
             : DATE_FIELDS.has(sortBy)
@@ -61,13 +68,15 @@ export const exportBookings = async (req, res) => {
         if (fromDate || toDate) {
             const toDateObj = toDate ? new Date(toDate) : null;
             const fromDateObj = fromDate ? new Date(fromDate) : null;
-
             const DATE_FIELD_MAP = {
                 createdDate: "createdAt",
                 scheduledDate: "scheduledDate",
                 arrivedDate: "arrivedAt",
+                arrivedAt: "arrivedAt",
                 cancelledDate: "cancelledAt",
+                cancelledAt: "cancelledAt",
                 completedDate: "completedAt",
+                completedAt: "completedAt",
             };
             const dateFilterField = DATE_FIELD_MAP[sortBy] || "createdAt";
 
@@ -83,7 +92,8 @@ export const exportBookings = async (req, res) => {
         }
 
         if (typeof search === "string" && search.trim()) {
-            const regex = new RegExp(search.trim(), "i");
+            const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            const regex = new RegExp(safeSearch, "i");
             filter.$or = [
                 { vehicleRegNo: regex },
                 { makeModel: regex },
@@ -102,6 +112,10 @@ export const exportBookings = async (req, res) => {
                 .map((id) => id.trim())
                 .filter((id) => mongoose.Types.ObjectId.isValid(id));
             if (ids.length > 0) filter.services = { $in: ids };
+        }
+
+        if (user && mongoose.Types.ObjectId.isValid(user)) {
+            filter.createdBy = user; // ✅ added user filter
         }
 
         // -------------------------
@@ -125,14 +139,14 @@ export const exportBookings = async (req, res) => {
         // -------------------------
         const formatted = bookings.map((b, i) => ({
             Row: i + 1,
-            CreatedDate: b.createdAt,
-            ScheduledDate: b.scheduledDate,
+            CreatedDate: b.createdAt ? new Date(b.createdAt).toISOString() : "",
+            ScheduledDate: b.scheduledDate ? new Date(b.scheduledDate).toISOString() : "",
             CreatedBy: b.createdBy?.username ?? "",
-            ArrivedDate: b.arrivedAt ?? "",
+            ArrivedDate: b.arrivedAt ? new Date(b.arrivedAt).toISOString() : "",
             ArrivedBy: b.arrivedBy?.username ?? "",
-            CompletedDate: b.completedAt ?? "",
+            CompletedDate: b.completedAt ? new Date(b.completedAt).toISOString() : "",
             CompletedBy: b.completedBy?.username ?? "",
-            CancelledDate: b.cancelledAt ?? "",
+            CancelledDate: b.cancelledAt ? new Date(b.cancelledAt).toISOString() : "",
             CancelledBy: b.cancelledBy?.username ?? "",
             Status: b.status,
             VehicleRegNo: b.vehicleRegNo,
@@ -143,7 +157,9 @@ export const exportBookings = async (req, res) => {
             OwnerEmail: b.ownerEmail,
             OwnerNumber: b.ownerNumber,
             Remarks: b.remarks,
-            Services: Array.isArray(b.services) ? b.services.map((s) => s?.name).join(", ") : "",
+            Services: Array.isArray(b.services)
+                ? b.services.map((s) => s?.name).join(", ")
+                : "",
             LabourCost: b.labourCost,
             PartsCost: b.partsCost,
             BookingPrice: b.bookingPrice,
@@ -152,9 +168,6 @@ export const exportBookings = async (req, res) => {
         const parser = new Parser();
         const csv = parser.parse(formatted);
 
-        // -------------------------
-        // 📌 Send CSV Response
-        // -------------------------
         res.header("Content-Type", "text/csv");
         res.attachment("bookings_export.csv");
         return res.send(csv);

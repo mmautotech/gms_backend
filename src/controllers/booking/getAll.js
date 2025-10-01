@@ -16,6 +16,7 @@ export const getAllBookings = async (req, res) => {
             toDate,
             search,
             services,
+            user, // ✅ new filter
         } = req.query;
 
         // 📌 Pagination
@@ -60,6 +61,7 @@ export const getAllBookings = async (req, res) => {
         // 📌 Filters
         const filter = {};
 
+        // Status
         if (typeof status === "string" && status.trim() !== "") {
             const normStatus = status.trim().toLowerCase();
             if (ALLOWED_STATUS.has(normStatus)) {
@@ -67,7 +69,7 @@ export const getAllBookings = async (req, res) => {
             }
         }
 
-        // Date range filter
+        // Date range
         if (fromDate || toDate) {
             const DATE_FIELD_MAP = {
                 createdDate: "createdAt",
@@ -106,6 +108,14 @@ export const getAllBookings = async (req, res) => {
             if (ids.length > 0) filter.services = { $in: ids };
         }
 
+        // ✅ User filter (matches createdBy OR updatedBy)
+        if (user && mongoose.Types.ObjectId.isValid(user)) {
+            filter.$or = [
+                { createdBy: new mongoose.Types.ObjectId(user) },
+                { updatedBy: new mongoose.Types.ObjectId(user) },
+            ];
+        }
+
         // 📌 Query
         const total = await Booking.countDocuments(filter);
 
@@ -125,6 +135,7 @@ export const getAllBookings = async (req, res) => {
 
         const SLIM_POPULATE = [
             { path: "createdBy", select: "username" },
+            { path: "updatedBy", select: "username" },
             { path: "arrivedBy", select: "username" },
             { path: "cancelledBy", select: "username" },
             { path: "completedBy", select: "username" },
@@ -149,7 +160,7 @@ export const getAllBookings = async (req, res) => {
             updatedDate: b.updatedAt ?? null,
             scheduledDate: b.scheduledDate,
             bookedBy: b.createdBy?.username ?? null,
-            updatedBy: b.updatedBy ?? null,
+            updatedBy: b.updatedBy?.username ?? null,
             cancelledDate: b.cancelledAt ?? null,
             cancelledBy: b.cancelledBy?.username ?? null,
             arrivalDate: b.arrivedAt ?? null,
@@ -206,6 +217,7 @@ export const getAllBookings = async (req, res) => {
                 toDate: toDate || null,
                 status: status || null,
                 services: services || null,
+                user: user || null, // ✅ added in response
                 sortBy,
                 sortDir: effectiveSortDir,
                 perPage: limit,
