@@ -1,38 +1,30 @@
 // src/routes/internalInvoiceRoutes.js
 import express from "express";
 import {
-    getAllInternalInvoices,
+    createInternalInvoice,
+    getInternalInvoices,
     getInternalInvoiceById,
-    deleteInternalInvoice,
-    generateInternalInvoice,
-} from "../controllers/internalinvoice.js";
-
-import { requireAuth, requireRole } from "../middleware/auth.js";
+} from "../controllers/internalinvoice.js"; // ✅ make sure filename matches
 
 const router = express.Router();
 
 /**
- * @route   GET /internal-invoices
- * @desc    Get all internal invoices (admin only)
+ * @route POST /api/internal-invoices
+ * @desc Create a new internal invoice
+ * Only invoiceId is required in the body; purchaseInvoiceId is auto-resolved by booking
  */
-router.get("/", requireAuth, requireRole("admin"), getAllInternalInvoices);
+router.post("/", createInternalInvoice);
 
 /**
- * @route   POST /internal-invoices/generate
- * @desc    Generate internal invoice from a main invoice (admin only)
+ * @route GET /api/internal-invoices
+ * @desc Get all internal invoices (with pagination & filters)
  */
-router.post("/generate", requireAuth, requireRole("admin"), generateInternalInvoice);
+router.get("/", getInternalInvoices);
 
 /**
- * @route   GET /internal-invoices/:id
- * @desc    Get internal invoice by ID (admin only)
+ * @route GET /api/internal-invoices/:id
+ * @desc Get single internal invoice by ID
  */
-router.get("/:id", requireAuth, requireRole("admin"), getInternalInvoiceById);
-
-/**
- * @route   DELETE /internal-invoices/:id
- * @desc    Delete an internal invoice (admin only)
- */
-router.delete("/:id", requireAuth, requireRole("admin"), deleteInternalInvoice);
+router.get("/:id", getInternalInvoiceById);
 
 export default router;
