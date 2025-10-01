@@ -21,8 +21,41 @@ export const createInternalInvoice = async (req, res) => {
             return res.status(404).json({ message: "Purchase invoice not found for this booking" });
         }
 
-        const revenue = invoice.totalAmount || 0;
-        const cost = purchaseInvoices.reduce((sum, pi) => sum + (pi.totalAmount || 0), 0);
+        const VAT_RATE = 0.2; // 20% VAT
+
+        // ==============================
+        // REVENUE calculation
+        // ==============================
+        let revenue = 0;
+        if (invoice.items && invoice.items.length > 0) {
+            invoice.items.forEach((item) => {
+                const base = item.amount || 0;
+                if (invoice.vatIncluded) {
+                    revenue += base + base * VAT_RATE;
+                } else {
+                    revenue += base;
+                }
+            });
+        } else {
+            revenue = invoice.totalAmount || 0;
+        }
+
+        // ==============================
+        // COST calculation
+        // ==============================
+        let cost = 0;
+        purchaseInvoices.forEach((pi) => {
+            pi.items?.forEach((item) => {
+                const base = (item.rate || 0) * (item.quantity || 1);
+                if (pi.vatIncluded) {
+                    cost += base + base * VAT_RATE;
+                } else {
+                    cost += base;
+                }
+            });
+        });
+
+        // PROFIT
         const profit = revenue - cost;
 
         // ✅ check if internal invoice already exists
