@@ -1,4 +1,3 @@
-// src/routes/purchaseInvoice.js
 import express from "express";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { validateWithZod } from "../middleware/zodMiddleware.js";
@@ -18,13 +17,28 @@ const router = express.Router();
 // 🔐 All routes require authentication
 router.use(requireAuth);
 
-// --- User routes ---
-router.post("/", validateWithZod(createPurchaseInvoiceSchema, "body"), purchaseController.createPurchaseInvoice);
+// --- Create (any authenticated user) ---
+router.post(
+    "/",
+    validateWithZod(createPurchaseInvoiceSchema, "body"),
+    purchaseController.createPurchaseInvoice
+);
 
-router.get("/my", validateWithZod(invoiceQuerySchema, "query"), purchaseController.getMyInvoices);
+// --- Get invoices (admin = all, non-admin = only own) ---
+router.get(
+    "/",
+    validateWithZod(invoiceQuerySchema, "query"),
+    purchaseController.getInvoices
+);
 
-router.get("/:id", validateWithZod(invoiceIdParamSchema, "params"), purchaseController.getPurchaseInvoiceById);
+// --- Get single invoice ---
+router.get(
+    "/:id",
+    validateWithZod(invoiceIdParamSchema, "params"),
+    purchaseController.getPurchaseInvoiceById
+);
 
+// --- Update invoice status (self update only) ---
 router.patch(
     "/:id/status",
     validateWithZod(invoiceIdParamSchema, "params"),
@@ -32,9 +46,7 @@ router.patch(
     purchaseController.updateMyInvoiceStatus
 );
 
-// --- Admin routes ---
-router.get("/", requireRole("admin"), validateWithZod(invoiceQuerySchema, "query"), purchaseController.getAllInvoices);
-
+// --- Admin-only full update ---
 router.put(
     "/:id",
     requireRole("admin"),
@@ -43,6 +55,7 @@ router.put(
     purchaseController.updatePurchaseInvoice
 );
 
+// --- Admin-only delete ---
 router.delete(
     "/:id",
     requireRole("admin"),

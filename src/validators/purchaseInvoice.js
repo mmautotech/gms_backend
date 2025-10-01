@@ -1,14 +1,10 @@
-// src/validators/purchaseInvoice.js
 import { z } from "zod";
 
 /**
  * 🔹 Purchase Item Schema
- * - part: ObjectId string
- * - rate: number (2 decimals max)
- * - quantity: positive integer
  */
 export const purchaseItemSchema = z.object({
-    part: z.string().min(1, "Part ID is required"), // ObjectId reference
+    part: z.string().min(1, "Part ID is required"), // ObjectId
     rate: z.coerce.number()
         .min(0, "Rate cannot be negative")
         .refine(
@@ -20,7 +16,6 @@ export const purchaseItemSchema = z.object({
 
 /**
  * 🔹 Create Purchase Invoice Schema
- * - booking is required (one booking can have many invoices)
  */
 export const createPurchaseInvoiceSchema = z.object({
     supplier: z.string().min(1, "Supplier ID is required"),
@@ -30,7 +25,11 @@ export const createPurchaseInvoiceSchema = z.object({
     discount: z.coerce.number().min(0).default(0),
     vatIncluded: z.boolean().default(true),
     vendorInvoiceNumber: z.string().min(1, "Vendor invoice number is required"),
-    vendorInvoicePhoto: z.union([z.string().url("Must be a valid URL"), z.string().length(0), z.null()]).optional(),
+    vendorInvoicePhoto: z.union([
+        z.string().url("Must be a valid URL"),
+        z.string().length(0),
+        z.null(),
+    ]).optional(),
     paymentStatus: z.enum(["Paid", "Partial", "Unpaid"], {
         required_error: "Payment status is required",
     }),
@@ -38,8 +37,6 @@ export const createPurchaseInvoiceSchema = z.object({
 
 /**
  * 🔹 Update Purchase Invoice Schema (Admin only)
- * - All fields optional
- * - Extra fields disallowed
  */
 export const updatePurchaseInvoiceSchema = createPurchaseInvoiceSchema.partial().strict();
 
@@ -61,18 +58,23 @@ export const invoiceIdParamSchema = z.object({
 
 /**
  * 🔹 Invoice Query Schema (filters, pagination, sorting)
- * - booking is optional (can return many invoices for the same booking)
  */
 export const invoiceQuerySchema = z.object({
     page: z.coerce.number().min(1).default(1),
-    limit: z.coerce.number().min(1).max(100).default(50),
 
-    purchaser: z.string().optional(),
+    // ✅ only allow specific limits
+    limit: z.coerce.number().refine(
+        (val) => [5, 25, 50, 100].includes(val),
+        { message: "Limit must be one of 5, 25, 50, or 100" }
+    ).default(25),
+
+    // Filters
+    purchaser: z.string().optional(), // only used by admin
     supplier: z.string().optional(),
-    booking: z.string().optional(),   // ✅ allows fetching multiple invoices per booking
-    part: z.string().optional(),      // ✅ filter invoices by part ID
-
+    booking: z.string().optional(),
+    part: z.string().optional(),
     paymentStatus: z.enum(["Paid", "Partial", "Unpaid"]).optional(),
+
     vatIncluded: z.enum(["true", "false"])
         .transform((val) => val === "true")
         .optional(),
@@ -81,6 +83,10 @@ export const invoiceQuerySchema = z.object({
     endDate: z.coerce.date().optional(),
     paymentDate: z.coerce.date().optional(),
 
-    sortBy: z.enum(["paymentDate", "createdAt", "updatedAt"]).optional(),
-    sortOrder: z.enum(["asc", "desc"]).optional(),
+    // ✅ Sorting
+    sortBy: z.enum(["paymentDate", "createdAt"]).default("createdAt"),
+    sortOrder: z.enum(["asc", "desc"]).default("desc"),
+
+    // ✅ Unified search field
+    search: z.string().optional(),
 });
