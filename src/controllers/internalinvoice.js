@@ -4,8 +4,8 @@ import Invoice from "../models/Invoice.js";
 import PurchaseInvoice from "../models/PurchaseInvoice.js";
 
 /**
- * Create an internal invoice
- * Only requires invoiceId from frontend.
+ * ✅ Create an internal invoice
+ * Requires invoiceId from frontend
  */
 export const createInternalInvoice = async (req, res) => {
     try {
@@ -15,39 +15,62 @@ export const createInternalInvoice = async (req, res) => {
         const invoice = await Invoice.findById(invoiceId);
         if (!invoice) return res.status(404).json({ message: "Invoice not found" });
 
-        // fetch purchase invoice using booking from invoice
-        const purchaseInvoice = await PurchaseInvoice.findOne({ booking: invoice.booking });
-        if (!purchaseInvoice)
+        // fetch all purchase invoices for this booking
+        const purchaseInvoices = await PurchaseInvoice.find({ booking: invoice.booking });
+        if (!purchaseInvoices || purchaseInvoices.length === 0) {
             return res.status(404).json({ message: "Purchase invoice not found for this booking" });
+        }
 
         const revenue = invoice.totalAmount || 0;
-        const cost = purchaseInvoice.totalAmount || 0;
+        const cost = purchaseInvoices.reduce((sum, pi) => sum + (pi.totalAmount || 0), 0);
         const profit = revenue - cost;
 
-        // create internal invoice
-        const internalInvoice = new InternalInvoice({
+        // ✅ check if internal invoice already exists
+        let internalInvoice = await InternalInvoice.findOne({
             booking: invoice.booking,
             invoice: invoice._id,
-            purchaseInvoice: purchaseInvoice._id,
-            revenue,
-            cost,
-            profit,
-            createdBy: req.user?._id,
         });
 
-        await internalInvoice.save();
-        res.status(201).json({
-            message: "Internal invoice created successfully",
-            data: internalInvoice,
-        });
+        if (internalInvoice) {
+            // ✅ update existing
+            internalInvoice.purchaseInvoices = purchaseInvoices.map((pi) => pi._id);
+            internalInvoice.revenue = revenue;
+            internalInvoice.cost = cost;
+            internalInvoice.profit = profit;
+            internalInvoice.updatedBy = req.user?._id;
+
+            await internalInvoice.save();
+
+            return res.status(200).json({
+                message: "Internal invoice updated successfully",
+                data: internalInvoice,
+            });
+        } else {
+            // ✅ create new
+            internalInvoice = new InternalInvoice({
+                booking: invoice.booking,
+                invoice: invoice._id,
+                purchaseInvoices: purchaseInvoices.map((pi) => pi._id),
+                revenue,
+                cost,
+                profit,
+                createdBy: req.user?._id,
+            });
+
+            await internalInvoice.save();
+
+            return res.status(201).json({
+                message: "Internal invoice created successfully",
+                data: internalInvoice,
+            });
+        }
     } catch (err) {
-        console.error("❌ Error creating internal invoice:", err);
+        console.error("❌ Error creating/updating internal invoice:", err);
         res.status(500).json({ message: "Server error" });
     }
 };
-
 /**
- * Get paginated internal invoices with optional filters
+ * ✅ Get paginated internal invoices with optional filters
  */
 export const getInternalInvoices = async (req, res) => {
     try {
@@ -59,10 +82,10 @@ export const getInternalInvoices = async (req, res) => {
         const records = await InternalInvoice.find(query)
             .populate("invoice")
             .populate({
-                path: "purchaseInvoice",
+                path: "purchaseInvoices",
                 populate: {
                     path: "items.part",
-                    select: "partName", // ✅ Only fetch partName
+                    select: "partName",
                 },
             })
             .populate("booking")
@@ -72,7 +95,7 @@ export const getInternalInvoices = async (req, res) => {
 
         const total = await InternalInvoice.countDocuments(query);
 
-        // ✅ format response
+        // format response
         const data = records.map((inv) => {
             const items = [];
 
@@ -90,17 +113,19 @@ export const getInternalInvoices = async (req, res) => {
                 });
             });
 
-            // from Purchase Invoice items
-            inv.purchaseInvoice?.items?.forEach((i) => {
-                items.push({
-                    description: i.part?.partName || "N/A", // ✅ show part name
-                    type: "Purchase",
-                    quantity: i.quantity,
-                    cost: i.rate || 0,
-                    selling: 0,
-                    vatIncluded: inv.purchaseInvoice?.vatIncluded,
-                    total: i.rate * i.quantity,
-                    status: inv.purchaseInvoice?.paymentStatus,
+            // from ALL Purchase Invoices
+            inv.purchaseInvoices?.forEach((pi) => {
+                pi.items?.forEach((i) => {
+                    items.push({
+                        description: i.part?.partName || "N/A",
+                        type: "Purchase",
+                        quantity: i.quantity,
+                        cost: i.rate || 0,
+                        selling: 0,
+                        vatIncluded: pi.vatIncluded,
+                        total: i.rate * i.quantity,
+                        status: pi.paymentStatus,
+                    });
                 });
             });
 
@@ -108,7 +133,7 @@ export const getInternalInvoices = async (req, res) => {
                 _id: inv._id,
                 booking: inv.booking,
                 invoice: inv.invoice,
-                purchaseInvoice: inv.purchaseInvoice,
+                purchaseInvoices: inv.purchaseInvoices,
                 revenue: inv.revenue,
                 cost: inv.cost,
                 profit: inv.profit,
@@ -133,7 +158,7 @@ export const getInternalInvoices = async (req, res) => {
 };
 
 /**
- * ✅ Get Internal Invoice by ID (with partName populated)
+ * ✅ Get Internal Invoice by ID
  */
 export const getInternalInvoiceById = async (req, res) => {
     try {
@@ -142,7 +167,7 @@ export const getInternalInvoiceById = async (req, res) => {
         const inv = await InternalInvoice.findById(id)
             .populate("invoice")
             .populate({
-                path: "purchaseInvoice",
+                path: "purchaseInvoices",
                 populate: {
                     path: "items.part",
                     select: "partName",
@@ -169,16 +194,18 @@ export const getInternalInvoiceById = async (req, res) => {
             });
         });
 
-        inv.purchaseInvoice?.items?.forEach((i) => {
-            items.push({
-                description: i.part?.partName || "N/A",
-                type: "Purchase",
-                quantity: i.quantity,
-                cost: i.rate || 0,
-                selling: 0,
-                vatIncluded: inv.purchaseInvoice?.vatIncluded,
-                total: i.rate * i.quantity,
-                status: inv.purchaseInvoice?.paymentStatus,
+        inv.purchaseInvoices?.forEach((pi) => {
+            pi.items?.forEach((i) => {
+                items.push({
+                    description: i.part?.partName || "N/A",
+                    type: "Purchase",
+                    quantity: i.quantity,
+                    cost: i.rate || 0,
+                    selling: 0,
+                    vatIncluded: pi.vatIncluded,
+                    total: i.rate * i.quantity,
+                    status: pi.paymentStatus,
+                });
             });
         });
 
@@ -187,7 +214,7 @@ export const getInternalInvoiceById = async (req, res) => {
                 _id: inv._id,
                 booking: inv.booking,
                 invoice: inv.invoice,
-                purchaseInvoice: inv.purchaseInvoice,
+                purchaseInvoices: inv.purchaseInvoices,
                 revenue: inv.revenue,
                 cost: inv.cost,
                 profit: inv.profit,
