@@ -38,21 +38,20 @@ router.get(
     purchaseController.getPurchaseInvoiceById
 );
 
-// --- Update invoice status (self update only) ---
+// --- Update invoice status (any authenticated user) ---
 router.patch(
     "/:id/status",
     validateWithZod(invoiceIdParamSchema, "params"),
     validateWithZod(updateInvoiceStatusSchema, "body"),
-    purchaseController.updateMyInvoiceStatus
+    purchaseController.updateInvoiceStatus // 👈 new controller
 );
 
-// --- Admin-only full update ---
+// --- Full update (authenticated user, not only admin) ---
 router.put(
     "/:id",
-    requireRole("admin"),
     validateWithZod(invoiceIdParamSchema, "params"),
     validateWithZod(updatePurchaseInvoiceSchema, "body"),
-    purchaseController.updatePurchaseInvoice
+    purchaseController.updatePurchaseInvoice // 👈 updated controller
 );
 
 // --- Admin-only delete ---

@@ -1,10 +1,11 @@
+// src/validators/purchaseInvoice.js
 import { z } from "zod";
 
 /**
  * 🔹 Purchase Item Schema
  */
 export const purchaseItemSchema = z.object({
-    part: z.string().min(1, "Part ID is required"), // ObjectId
+    part: z.string().min(1, "Part ID is required"), // ObjectId string
     rate: z.coerce.number()
         .min(0, "Rate cannot be negative")
         .refine(
@@ -16,10 +17,11 @@ export const purchaseItemSchema = z.object({
 
 /**
  * 🔹 Create Purchase Invoice Schema
+ * - Booking is required on creation
  */
 export const createPurchaseInvoiceSchema = z.object({
     supplier: z.string().min(1, "Supplier ID is required"),
-    booking: z.string().min(1, "Booking ID is required"),
+    booking: z.string().min(1, "Booking ID is required"), // locked once created
     items: z.array(purchaseItemSchema).min(1, "At least one purchase item is required"),
     paymentDate: z.coerce.date({ required_error: "Payment date is required" }),
     discount: z.coerce.number().min(0).default(0),
@@ -30,18 +32,33 @@ export const createPurchaseInvoiceSchema = z.object({
         z.string().length(0),
         z.null(),
     ]).optional(),
-    paymentStatus: z.enum(["Paid", "Partial", "Unpaid"], {
-        required_error: "Payment status is required",
-    }),
+    paymentStatus: z.enum(["Paid", "Partial", "Unpaid"]).default("Unpaid"),
 }).strict();
 
 /**
- * 🔹 Update Purchase Invoice Schema (Admin only)
+ * 🔹 Update Purchase Invoice Schema
+ * - ❌ booking cannot be updated
+ * - All other fields optional
  */
-export const updatePurchaseInvoiceSchema = createPurchaseInvoiceSchema.partial().strict();
+export const updatePurchaseInvoiceSchema = z.object({
+    supplier: z.string().min(1, "Supplier ID is required").optional(),
+    items: z.array(purchaseItemSchema)
+        .min(1, "At least one purchase item is required")
+        .optional(),
+    paymentDate: z.coerce.date().optional(),
+    discount: z.coerce.number().min(0).optional(),
+    vatIncluded: z.boolean().optional(),
+    vendorInvoiceNumber: z.string().min(1).optional(),
+    vendorInvoicePhoto: z.union([
+        z.string().url("Must be a valid URL"),
+        z.string().length(0),
+        z.null(),
+    ]).optional(),
+    paymentStatus: z.enum(["Paid", "Partial", "Unpaid"]).optional(),
+}).strict();
 
 /**
- * 🔹 Update Payment Status Schema (User self-update)
+ * 🔹 Update Payment Status Schema
  */
 export const updateInvoiceStatusSchema = z.object({
     paymentStatus: z.enum(["Paid", "Partial", "Unpaid"], {
@@ -69,7 +86,7 @@ export const invoiceQuerySchema = z.object({
     ).default(25),
 
     // Filters
-    purchaser: z.string().optional(), // only used by admin
+    purchaser: z.string().optional(),
     supplier: z.string().optional(),
     booking: z.string().optional(),
     part: z.string().optional(),

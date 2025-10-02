@@ -1,28 +1,29 @@
 import mongoose from "mongoose";
 import PurchaseInvoice from "../../models/PurchaseInvoice.js";
-import Booking from "../../models/Booking.js";
 import Part from "../../models/Part.js";
-import { BOOKING_STATUS } from "../../constants/bookingConstants.js";
+import Supplier from "../../models/Supplier.js";
 
 export const updatePurchaseInvoice = async (req, res) => {
     try {
-        const { booking, items } = req.body;
+        const { supplier, booking, items } = req.body;
 
-        let bookingId = null;
+        // ❌ Prevent booking change
         if (booking) {
-            if (!mongoose.isValidObjectId(booking)) {
-                return res.status(400).json({ success: false, error: "Invalid booking ID" });
-            }
-            const bookingMatch = await Booking.findOne({
-                _id: booking,
-                status: BOOKING_STATUS.ARRIVED,
+            return res.status(400).json({
+                success: false,
+                error: "Booking cannot be changed once invoice is created"
             });
-            if (!bookingMatch) {
-                return res
-                    .status(400)
-                    .json({ success: false, error: "Booking must be ARRIVED to link invoice" });
+        }
+
+        // ✅ Validate supplier if provided
+        if (supplier) {
+            if (!mongoose.isValidObjectId(supplier)) {
+                return res.status(400).json({ success: false, error: "Invalid supplier ID" });
             }
-            bookingId = bookingMatch._id;
+            const supplierExists = await Supplier.findById(supplier);
+            if (!supplierExists) {
+                return res.status(400).json({ success: false, error: "Supplier not found" });
+            }
         }
 
         // ✅ Validate items if provided
@@ -30,14 +31,10 @@ export const updatePurchaseInvoice = async (req, res) => {
             for (let i = 0; i < items.length; i++) {
                 const { part, rate, quantity } = items[i];
                 if (!part || rate == null || quantity == null) {
-                    return res
-                        .status(400)
-                        .json({ success: false, error: `Item at index ${i} is invalid` });
+                    return res.status(400).json({ success: false, error: `Item at index ${i} is invalid` });
                 }
                 if (!mongoose.isValidObjectId(part)) {
-                    return res
-                        .status(400)
-                        .json({ success: false, error: `Invalid Part ID at index ${i}` });
+                    return res.status(400).json({ success: false, error: `Invalid Part ID at index ${i}` });
                 }
                 const partExists = await Part.findById(part);
                 if (!partExists || !partExists.isActive) {
@@ -49,11 +46,10 @@ export const updatePurchaseInvoice = async (req, res) => {
             }
         }
 
-        // ❌ Removed duplicate active invoice restriction
-
+        // ✅ Update allowed fields
         const invoice = await PurchaseInvoice.findByIdAndUpdate(
             req.params.id,
-            { ...req.body, ...(bookingId ? { booking: bookingId } : {}) },
+            { ...req.body },
             { new: true, runValidators: true }
         );
 

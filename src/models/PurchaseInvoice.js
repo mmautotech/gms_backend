@@ -15,7 +15,8 @@ const PurchaseItemSchema = new mongoose.Schema(
             type: Number,
             required: true,
             min: 0,
-            set: (v) => Number(v.toFixed(2)), // enforce 2 decimals
+            // store with 2 decimals consistently
+            set: (v) => (v != null ? Number(v.toFixed(2)) : v),
         },
         quantity: {
             type: Number,
@@ -35,7 +36,7 @@ const PurchaseInvoiceSchema = new mongoose.Schema(
         // Supplier (linked to Supplier model)
         supplier: { type: ObjectId, ref: "Supplier", required: true },
 
-        // Booking (now one-to-many: a booking can have multiple invoices)
+        // Booking (locked to one booking per invoice, cannot be changed after creation)
         booking: { type: ObjectId, ref: "Booking", required: true, index: true },
 
         // Active flag
@@ -47,23 +48,24 @@ const PurchaseInvoiceSchema = new mongoose.Schema(
         // Payment due date
         paymentDate: { type: Date, required: true },
 
-        // Payment status
+        // Payment status (default: Unpaid)
         paymentStatus: {
             type: String,
             enum: ["Paid", "Partial", "Unpaid"],
             required: true,
+            default: "Unpaid",
         },
 
-        // Discount (default 0)
+        // Discount (default 0, enforce 2 decimals)
         discount: {
             type: Number,
             required: true,
             default: 0,
             min: 0,
-            set: (v) => Number(v.toFixed(2)),
+            set: (v) => (v != null ? Number(v.toFixed(2)) : v),
         },
 
-        // VAT included (true → apply 20% VAT)
+        // VAT included (true → apply 20% VAT multiplier)
         vatIncluded: { type: Boolean, default: true },
 
         // Vendor invoice reference
@@ -82,19 +84,12 @@ PurchaseInvoiceSchema.virtual("totalAmount").get(function () {
         0
     );
     const discounted = subtotal - this.discount;
-    // Always apply VAT multiplier if vatIncluded = true
     return this.vatIncluded ? discounted * 1.2 : discounted;
 });
 
 // --- JSON options ---
 PurchaseInvoiceSchema.set("toJSON", { virtuals: true });
 PurchaseInvoiceSchema.set("toObject", { virtuals: true });
-
-// ❌ Removed unique index: allow multiple invoices per booking
-// PurchaseInvoiceSchema.index(
-//     { booking: 1, isActive: 1 },
-//     { unique: true, partialFilterExpression: { isActive: true } }
-// );
 
 const PurchaseInvoice = mongoose.model("PurchaseInvoice", PurchaseInvoiceSchema);
 export default PurchaseInvoice;
