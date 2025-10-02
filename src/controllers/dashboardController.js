@@ -1,76 +1,147 @@
 // controllers/dashboardController.js
 import Invoice from "../models/Invoice.js";
 import Booking from "../models/Booking.js";
-import Service from "../models/Service.js"; // your Service model
+import Service from "../models/Service.js";
 
 // GET /admin/dashboard/stats
 export const getDashboardStats = async (req, res) => {
     try {
         /** -------------------------------
-         * Monthly Revenue
+         * Revenue by different intervals
          -------------------------------- */
-        const revenueData = await Invoice.aggregate([
-            { $match: { totalAmount: { $gt: 0 } } },
+        const revenue = {};
+
+        const today = new Date();
+        const past30 = new Date();
+        past30.setDate(today.getDate() - 29); // last 30 days
+
+        // Daily Revenue (last 30 days)
+        revenue.daily = await Invoice.aggregate([
+            {
+                $match: {
+                    totalAmount: { $gt: 0 },
+                    invoiceDate: { $gte: past30, $lte: today },
+                },
+            },
             {
                 $group: {
-                    _id: { $month: "$invoiceDate" }, // month number 1-12
+                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$invoiceDate" } },
                     totalRevenue: { $sum: "$totalAmount" },
                 },
             },
             { $sort: { "_id": 1 } },
         ]);
 
+        // Weekly Revenue (last 12 weeks)
+        const past12Weeks = new Date();
+        past12Weeks.setDate(today.getDate() - 7 * 11); // last 12 weeks
+
+        revenue.weekly = await Invoice.aggregate([
+            {
+                $match: {
+                    totalAmount: { $gt: 0 },
+                    invoiceDate: { $gte: past12Weeks, $lte: today },
+                },
+            },
+            {
+                $group: {
+                    _id: {
+                        isoWeek: { $isoWeek: "$invoiceDate" },
+                        year: { $year: "$invoiceDate" },
+                    },
+                    totalRevenue: { $sum: "$totalAmount" },
+                },
+            },
+            { $sort: { "_id.year": 1, "_id.isoWeek": 1 } },
+        ]);
+
+        // Monthly Revenue
+        const revenueData = await Invoice.aggregate([
+            { $match: { totalAmount: { $gt: 0 } } },
+            {
+                $group: {
+                    _id: { $month: "$invoiceDate" },
+                    totalRevenue: { $sum: "$totalAmount" },
+                },
+            },
+            { $sort: { "_id": 1 } },
+        ]);
         const monthlyRevenue = Array(12).fill(0);
-        revenueData.forEach(r => {
-            if (r._id && r._id >= 1 && r._id <= 12) {
-                monthlyRevenue[r._id - 1] = r.totalRevenue;
-            }
+        revenueData.forEach((r) => {
+            if (r._id >= 1 && r._id <= 12) monthlyRevenue[r._id - 1] = r.totalRevenue;
         });
+        revenue.monthly = monthlyRevenue;
 
-        /** -------------------------------
-         * Service Trends
-         -------------------------------- */
-        const serviceTrendsData = await Booking.aggregate([
-            { $unwind: "$prebookingServices" }, // explode array
-            { $match: { "prebookingServices": { $ne: null } } },
+        // Yearly Revenue
+        revenue.yearly = await Invoice.aggregate([
+            { $match: { totalAmount: { $gt: 0 } } },
             {
                 $group: {
-                    _id: "$prebookingServices", // currently service ID
-                    count: { $sum: 1 },
+                    _id: { $year: "$invoiceDate" },
+                    totalRevenue: { $sum: "$totalAmount" },
                 },
             },
-            { $sort: { count: -1 } },
+            { $sort: { "_id": 1 } },
         ]);
 
-        // Lookup service names for trends
-        const serviceTrendsWithNames = await Promise.all(
-            serviceTrendsData.map(async s => {
-                const service = await Service.findById(s._id).lean();
-                return {
-                    _id: service?.name || "Unknown Service",
-                    count: s.count,
-                };
-            })
-        );
+        /** -------------------------------
+         * Service Trends by Interval
+         -------------------------------- */
+        const serviceTrends = {};
+        const intervals = [
+            { name: "daily", start: past30, format: "%Y-%m-%d" },
+            { name: "weekly", start: past12Weeks, format: "%Y-%U" },
+            { name: "monthly", start: null, format: "%Y-%m" },
+            { name: "yearly", start: null, format: "%Y" },
+        ];
+
+        for (const interval of intervals) {
+            const matchStage = { prebookingServices: { $ne: null } };
+            if (interval.start) matchStage.bookingDate = { $gte: interval.start, $lte: today };
+
+            const data = await Booking.aggregate([
+                { $unwind: "$prebookingServices" },
+                { $match: matchStage },
+                {
+                    $group: {
+                        _id: {
+                            service: "$prebookingServices",
+                            period: { $dateToString: { format: interval.format, date: "$bookingDate" } },
+                        },
+                        count: { $sum: 1 },
+                    },
+                },
+                {
+                    $lookup: {
+                        from: "services",
+                        localField: "_id.service",
+                        foreignField: "_id",
+                        as: "service",
+                    },
+                },
+                { $unwind: "$service" },
+                {
+                    $project: {
+                        service: "$service.name",
+                        period: "$_id.period",
+                        count: 1,
+                    },
+                },
+                { $sort: { period: 1, count: -1 } },
+            ]);
+
+            serviceTrends[interval.name] = data;
+        }
 
         /** -------------------------------
-         * Booking Stats (Dynamic)
+         * Booking Stats
          -------------------------------- */
-        // Aggregate bookings by status
         const bookingStatusData = await Booking.aggregate([
-            {
-                $group: {
-                    _id: "$status",
-                    count: { $sum: 1 },
-                },
-            },
+            { $group: { _id: "$status", count: { $sum: 1 } } },
         ]);
 
-        // Prepare bookings object
-        const bookings = {
-            total: await Booking.countDocuments(),
-        };
-        bookingStatusData.forEach(b => {
+        const bookings = { total: await Booking.countDocuments() };
+        bookingStatusData.forEach((b) => {
             bookings[b._id] = b.count;
         });
 
@@ -78,8 +149,8 @@ export const getDashboardStats = async (req, res) => {
          * Response
          -------------------------------- */
         res.json({
-            monthlyRevenue,
-            serviceTrends: serviceTrendsWithNames,
+            revenue,
+            serviceTrends,
             bookings,
         });
     } catch (err) {
