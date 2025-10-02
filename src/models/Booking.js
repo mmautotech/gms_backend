@@ -13,6 +13,11 @@ const upsellSchema = new mongoose.Schema(
         upsellPrice: moneyOpts,
         createdBy: { type: ObjectId, ref: "User" },
         updatedBy: { type: ObjectId, ref: "User" },
+
+        // 📸 Upsell Confirmation Photo
+        upsellConfirmationPhoto: { type: Buffer, select: false },
+        upsellConfirmationPhotoCompressed: { type: Buffer, select: false },
+        upsellConfirmationPhotoType: { type: String, default: "image/jpeg" },
     },
     { timestamps: true }
 );

@@ -19,29 +19,20 @@ export const upsellParamsSchema = bookingIdParamSchema.extend({
 });
 
 // Schema: Create Upsell Body
+// Schema: Create Upsell Body
 export const createUpsellBodySchema = z.object({
-    serviceId: z
-        .string()
-        .refine(isValidObjectId, { message: "Invalid serviceId" }),
-
-    partId: z
-        .string()
-        .refine(isValidObjectId, { message: "Invalid partId" })
-        .optional(),
-
-    partsCost: z
-        .number({ invalid_type_error: "partsCost must be a number" })
-        .min(0, "partsCost must be a positive number"),
-
-    labourCost: z
-        .number({ invalid_type_error: "labourCost must be a number" })
-        .min(0, "labourCost must be a positive number"),
-
-    upsellPrice: z
-        .number({ invalid_type_error: "upsellPrice must be a number" })
-        .min(0, "upsellPrice must be a positive number"),
-
+    serviceId: z.string().refine(isValidObjectId, { message: "Invalid serviceId" }),
+    partId: z.string().refine(isValidObjectId, { message: "Invalid partId" }).optional(),
+    partsCost: z.number().min(0, "partsCost must be positive"),
+    labourCost: z.number().min(0, "labourCost must be positive"),
+    upsellPrice: z.number().min(0, "upsellPrice must be positive"),
     status: z.enum(["pending", "approved", "rejected"]).optional(),
+
+    // ✅ Now required
+    upsellConfirmationPhoto: z
+        .string()
+        .startsWith("data:image/", "Must be a base64 image")
+        .min(10, "upsellConfirmationPhoto cannot be empty"),
 });
 
 // Schema: Update Upsell Body (all optional)

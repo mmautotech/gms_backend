@@ -11,6 +11,7 @@ import {
 import {
     createUpsell,
     getSellsByBooking,
+    getUpsellPhoto
 } from "../controllers/upsellController.js";
 
 
@@ -34,11 +35,19 @@ router.get(
     getSellsByBooking
 );
 
+// --- Get Upsell Photo ---
+router.get(
+    "/booking/:bookingId/upsell/:upsellId/photo",
+    validateWithZod(upsellParamsSchema, "params"),
+    getUpsellPhoto
+);
+
 // --- Update Upsell ---
 router.put(
     "/booking/:bookingId/upsell/:upsellId",
     validateWithZod(upsellParamsSchema, "params"),
-    validateWithZod(updateUpsellBodySchema, "body"),
+    validateWithZod(updateUpsellBodySchema, "body")
+    // your updateUpsell controller here
 );
 
 export default router;
