@@ -36,13 +36,11 @@ export const getInvoices = async (req, res) => {
         const match = { isActive: true };
 
         // 🔹 Admin can filter any purchaser, non-admin only their own
-        if (req.user.userType === "admin") {
-            if (purchaser && mongoose.isValidObjectId(purchaser)) {
-                match.purchaser = new mongoose.Types.ObjectId(purchaser);
-            }
-        } else {
-            match.purchaser = new mongoose.Types.ObjectId(req.user._id);
+        // 🔹 Purchaser filter (applies only if passed explicitly in query)
+        if (purchaser && mongoose.isValidObjectId(purchaser)) {
+            match.purchaser = new mongoose.Types.ObjectId(purchaser);
         }
+
 
         if (supplier && mongoose.isValidObjectId(supplier)) {
             match.supplier = new mongoose.Types.ObjectId(supplier);

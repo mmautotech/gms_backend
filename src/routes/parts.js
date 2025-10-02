@@ -5,6 +5,7 @@ import { validateWithZod } from "../middleware/zodMiddleware.js";
 
 import {
     partIdParamSchema,
+    bookingIdParamSchema,
     createPartBodySchema,
     updatePartBodySchema,
     partQuerySchema,
@@ -17,18 +18,17 @@ const router = express.Router();
 // ✅ All routes require authentication
 router.use(requireAuth);
 
-// 🔍 Accessible to ALL authenticated users
+/**
+ * 🔍 Public (all authenticated users)
+ */
 router.get("/", validateWithZod(partQuerySchema, "query"), partsController.getParts);
 router.get("/dropdown", partsController.getPartsDropdown);
 router.get("/:id", validateWithZod(partIdParamSchema, "params"), partsController.getPartById);
 
-// ✏️ Create Part → now allowed for ALL users
+/**
+ * ✏️ Create & Update
+ */
 router.post("/", validateWithZod(createPartBodySchema), partsController.createPart);
-
-// 🔧 Admin-only routes
-router.use(requireRole("admin"));
-
-// Update
 router.put(
     "/:id",
     validateWithZod(partIdParamSchema, "params"),
@@ -36,10 +36,32 @@ router.put(
     partsController.updatePart
 );
 
+/**
+ * 🔍 Get all parts linked to booking.services (only active parts)
+ */
+router.get(
+    "/by-booking/:bookingId",
+    validateWithZod(bookingIdParamSchema, "params"),
+    partsController.getPartsByBooking
+);
+
+/**
+ * 🔧 Admin-only routes
+ */
+router.use(requireRole("admin"));
+
 // Soft delete (deactivate)
-router.delete("/:id", validateWithZod(partIdParamSchema, "params"), partsController.deactivatePart);
+router.delete(
+    "/:id",
+    validateWithZod(partIdParamSchema, "params"),
+    partsController.deactivatePart
+);
 
 // Reactivate
-router.patch("/:id/activate", validateWithZod(partIdParamSchema, "params"), partsController.activatePart);
+router.patch(
+    "/:id/activate",
+    validateWithZod(partIdParamSchema, "params"),
+    partsController.activatePart
+);
 
 export default router;

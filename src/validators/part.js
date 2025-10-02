@@ -1,54 +1,44 @@
+// validators/part.js
 import { z } from "zod";
 import mongoose from "mongoose";
 
 const isValidObjectId = (val) => mongoose.Types.ObjectId.isValid(val);
 
-// ✅ ID param
+// ✅ Part ID param
 export const partIdParamSchema = z.object({
     id: z
         .string()
-        .refine((val) => isValidObjectId(val), { message: "Invalid part ID" }),
+        .refine(isValidObjectId, { message: "Invalid part ID" }),
+});
+
+// ✅ Booking ID param (for /parts/by-booking/:bookingId)
+export const bookingIdParamSchema = z.object({
+    bookingId: z
+        .string()
+        .refine(isValidObjectId, { message: "Invalid booking ID" }),
 });
 
 // ✅ Create schema
-export const createPartBodySchema = z
-    .object({
-        partName: z.string().min(1, "Part name is required").trim(),
+export const createPartBodySchema = z.object({
+    partName: z.string().min(1, "Part name is required").trim(),
+    partNumber: z.preprocess(
+        (val) => (val === "" ? null : val),
+        z.string().trim().nullable().optional()
+    ),
+    description: z.preprocess(
+        (val) => (typeof val === "string" ? val.trim() : val),
+        z.string().optional().nullable()
+    ),
+}).strict();
 
-        partNumber: z.preprocess(
-            (val) => (val === "" ? null : val),
-            z.string().trim().nullable().optional()
-        ),
+// ✅ Update schema
+export const updatePartBodySchema = z.object({
+    partName: z.string().min(1).trim().optional(),
+    partNumber: z.string().trim().nullable().optional(),
+    description: z.string().optional().nullable(),
+}).strict();
 
-        price: z.preprocess(
-            (val) => (typeof val === "string" ? Number(val) : val),
-            z
-                .number({ required_error: "Price is required" })
-                .min(0, "Price cannot be negative")
-                .refine((val) => /^\d+(\.\d{1,2})?$/.test(val.toString()), {
-                    message: "Price can have up to two decimal places",
-                })
-        ),
-
-        description: z.preprocess(
-            (val) => (typeof val === "string" ? val.trim() : val),
-            z.string().optional().nullable()
-        ),
-    })
-    .strict();
-
-// ✅ Update schema (all optional)
-export const updatePartBodySchema = createPartBodySchema.partial().strict();
-
-// ✅ Query schema
+// ✅ Query schema (always enforce active parts)
 export const partQuerySchema = z.object({
     q: z.string().optional(),
-    includeInactive: z
-        .string()
-        .optional()
-        .transform((val) => val === "true"),
-    onlyInactive: z
-        .string()
-        .optional()
-        .transform((val) => val === "true"),
 });
