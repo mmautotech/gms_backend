@@ -1,4 +1,3 @@
-// controllers/serviceController.js
 import Service from "../models/Service.js";
 import mongoose from "mongoose";
 
@@ -66,16 +65,7 @@ export const createService = async (req, res) => {
             })
             .lean();
 
-        // normalize parts
-        const normalized = {
-            ...populated,
-            parts: (populated.parts || []).map((p) => ({
-                id: p._id,
-                label: p.partName,
-            })),
-        };
-
-        return res.status(201).json({ success: true, data: normalized });
+        return res.status(201).json({ success: true, data: populated });
     } catch (error) {
         console.error("❌ createService error:", error);
         return res.status(500).json({
@@ -123,8 +113,8 @@ export const getServiceById = async (req, res) => {
         const service = await Service.findById(id)
             .populate({
                 path: "parts",
-                match: { isActive: true },       // only active parts
-                select: "partName partNumber description isActive", // return full fields
+                match: { isActive: true },
+                select: "partName isActive",
             })
             .lean();
 
@@ -132,7 +122,6 @@ export const getServiceById = async (req, res) => {
             return res.status(404).json({ success: false, error: "Service not found" });
         }
 
-        // ⚡ return raw service + parts (like getParts)
         return res.json({ success: true, data: service });
     } catch (error) {
         console.error("❌ getServiceById error:", error);
@@ -183,15 +172,7 @@ export const updateService = async (req, res) => {
             })
             .lean();
 
-        const normalized = {
-            ...populated,
-            parts: (populated.parts || []).map((p) => ({
-                id: p._id,
-                label: p.partName,
-            })),
-        };
-
-        return res.json({ success: true, data: normalized, message: "Service updated successfully" });
+        return res.json({ success: true, data: populated, message: "Service updated successfully" });
     } catch (error) {
         console.error("❌ updateService error:", error);
         return res.status(500).json({
@@ -218,15 +199,7 @@ export const deleteService = async (req, res) => {
 
         if (!service) return res.status(404).json({ success: false, error: "Service not found" });
 
-        const normalized = {
-            ...service,
-            parts: (service.parts || []).map((p) => ({
-                id: p._id,
-                label: p.partName,
-            })),
-        };
-
-        return res.json({ success: true, data: normalized, message: "Service disabled successfully" });
+        return res.json({ success: true, data: service, message: "Service disabled successfully" });
     } catch (error) {
         console.error("❌ deleteService error:", error);
         return res.status(500).json({
@@ -253,15 +226,7 @@ export const activateService = async (req, res) => {
 
         if (!service) return res.status(404).json({ success: false, error: "Service not found" });
 
-        const normalized = {
-            ...service,
-            parts: (service.parts || []).map((p) => ({
-                id: p._id,
-                label: p.partName,
-            })),
-        };
-
-        return res.json({ success: true, data: normalized, message: "Service reactivated successfully" });
+        return res.json({ success: true, data: service, message: "Service reactivated successfully" });
     } catch (error) {
         console.error("❌ activateService error:", error);
         return res.status(500).json({
@@ -272,7 +237,7 @@ export const activateService = async (req, res) => {
 };
 
 /**
- * Get parts of a service only
+ * Get parts of a service only (returns full part docs)
  */
 export const getServiceParts = async (req, res) => {
     try {
@@ -293,12 +258,7 @@ export const getServiceParts = async (req, res) => {
             return res.status(404).json({ success: false, error: "Service not found" });
         }
 
-        const mapped = (service.parts || []).map((p) => ({
-            id: p._id,
-            label: p.partName,
-        }));
-
-        return res.json({ success: true, data: mapped });
+        return res.json({ success: true, data: service.parts || [] });
     } catch (error) {
         console.error("❌ getServiceParts error:", error);
         return res.status(500).json({

@@ -2,7 +2,8 @@ import Part from "../models/Part.js";
 import Service from "../models/Service.js";
 import Booking from "../models/Booking.js";
 
-const handleError = (error, res) => {
+const handleError = (error, res, label = "") => {
+    console.error(`❌ ${label} error:`, error);
     if (error.code === 11000) {
         return res.status(400).json({
             success: false,
@@ -19,18 +20,17 @@ export const createPart = async (req, res) => {
         const part = await Part.create({ partName });
         return res.status(201).json({ success: true, data: part });
     } catch (error) {
-        return handleError(error, res);
+        return handleError(error, res, "createPart");
     }
 };
 
-// ✅ Get all parts
+// ✅ Get all parts (raw docs)
 export const getParts = async (req, res) => {
     try {
-        const { q } = req.query;
         const parts = await Part.find().lean();
         return res.json({ success: true, data: parts });
     } catch (error) {
-        return handleError(error, res);
+        return handleError(error, res, "getParts");
     }
 };
 
@@ -41,7 +41,7 @@ export const getPartById = async (req, res) => {
         if (!part) return res.status(404).json({ success: false, error: "Part not found" });
         return res.json({ success: true, data: part });
     } catch (error) {
-        return handleError(error, res);
+        return handleError(error, res, "getPartById");
     }
 };
 
@@ -49,7 +49,6 @@ export const getPartById = async (req, res) => {
 export const updatePart = async (req, res) => {
     try {
         const { partName } = req.body;
-
         const part = await Part.findByIdAndUpdate(
             req.params.id,
             { partName },
@@ -57,10 +56,9 @@ export const updatePart = async (req, res) => {
         ).lean();
 
         if (!part) return res.status(404).json({ success: false, error: "Part not found" });
-
         return res.json({ success: true, data: part });
     } catch (error) {
-        return handleError(error, res);
+        return handleError(error, res, "updatePart");
     }
 };
 
@@ -71,16 +69,13 @@ export const deactivatePart = async (req, res) => {
             req.params.id,
             { isActive: false },
             { new: true }
-        );
+        ).lean();
+
         if (!part) return res.status(404).json({ success: false, error: "Part not found" });
 
-        return res.json({
-            success: true,
-            message: "Part deactivated",
-            data: part,
-        });
+        return res.json({ success: true, message: "Part deactivated", data: part });
     } catch (error) {
-        return handleError(error, res);
+        return handleError(error, res, "deactivatePart");
     }
 };
 
@@ -91,23 +86,23 @@ export const activatePart = async (req, res) => {
             req.params.id,
             { isActive: true },
             { new: true }
-        );
+        ).lean();
+
         if (!part) return res.status(404).json({ success: false, error: "Part not found" });
 
-        return res.json({
-            success: true,
-            message: "Part reactivated",
-            data: part,
-        });
+        return res.json({ success: true, message: "Part reactivated", data: part });
     } catch (error) {
-        return handleError(error, res);
+        return handleError(error, res, "activatePart");
     }
 };
 
-// ✅ Dropdown (active parts only)
-export const getPartsDropdown = async (req, res) => {
+// ✅ Dropdown (active parts only, normalized)
+export const getPartsDropdown = async (_req, res) => {
     try {
-        const parts = await Part.find({ isActive: true }).select("partName").sort({ partName: 1 }).lean();
+        const parts = await Part.find({ isActive: true })
+            .select("partName")
+            .sort({ partName: 1 })
+            .lean();
 
         const mapped = parts.map((p) => ({
             id: p._id,
@@ -116,11 +111,11 @@ export const getPartsDropdown = async (req, res) => {
 
         return res.json({ success: true, data: mapped });
     } catch (error) {
-        return res.status(500).json({ success: false, error: error.message });
+        return handleError(error, res, "getPartsDropdown");
     }
 };
 
-// ✅ Parts for a booking (active only)
+// ✅ Parts for a booking (active only, normalized)
 export const getPartsByBooking = async (req, res) => {
     try {
         const { bookingId } = req.params;
@@ -134,7 +129,6 @@ export const getPartsByBooking = async (req, res) => {
             return res.json({ success: true, data: [] });
         }
 
-        // find services with active parts only
         const services = await Service.find({ _id: { $in: booking.services } })
             .populate({
                 path: "parts",
@@ -145,7 +139,7 @@ export const getPartsByBooking = async (req, res) => {
 
         const uniqueParts = new Map();
         services.forEach((s) => {
-            s.parts.forEach((p) => {
+            (s.parts || []).forEach((p) => {
                 if (!uniqueParts.has(p._id.toString())) {
                     uniqueParts.set(p._id.toString(), p);
                 }
@@ -159,6 +153,6 @@ export const getPartsByBooking = async (req, res) => {
 
         return res.json({ success: true, data: mapped });
     } catch (error) {
-        return res.status(500).json({ success: false, error: error.message });
+        return handleError(error, res, "getPartsByBooking");
     }
 };
