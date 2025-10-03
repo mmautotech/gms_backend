@@ -11,25 +11,20 @@ export const exportPurchaseInvoicePDF = async (req, res) => {
             return res.status(400).json({ success: false, error: "Invoice ID is required" });
         }
 
-        // Fetch invoice
         const invoice = await PurchaseInvoice.findOne({ _id: invoiceId, isActive: true })
             .populate("supplier", "name contact")
             .populate("purchaser", "username")
             .populate("booking", "vehicleRegNo status scheduledDate")
-            .populate("items.part", "partName partNumber price")
+            .populate("items.part", "partName price")
             .lean();
 
         if (!invoice) {
             return res.status(404).json({ success: false, error: "Invoice not found" });
         }
 
-        // Create PDF
         const doc = new PDFDocument({ margin: 50 });
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader(
-            "Content-Disposition",
-            `inline; filename="purchase_invoice_${invoiceId}.pdf"`
-        );
+        res.setHeader("Content-Disposition", `inline; filename="purchase_invoice_${invoiceId}.pdf"`);
         doc.pipe(res);
 
         const logoPath = path.join(process.cwd(), "src/public/logo.png");
@@ -42,75 +37,67 @@ export const exportPurchaseInvoicePDF = async (req, res) => {
         doc.image(logoPath, pageWidth / 2 - 150, pageHeight / 2 - 75, { width: 300 });
         doc.restore();
 
-        // --- Header: Logo + Company Name
+        // --- Header
         const headerY = 45;
-        doc.image(logoPath, 50, headerY, { width: 80 }); // logo on left
-        doc.font("Helvetica-Bold").fontSize(18).text("PERIVALE MOTOR SERVICES", 140, headerY + 15, { align: "left" });
-        doc.fontSize(14).text("PURCHASE INVOICE", 140, headerY + 40, { align: "left" });
+        doc.image(logoPath, 50, headerY, { width: 80 });
+        doc.font("Helvetica-Bold").fontSize(18).text("PERIVALE MOTOR SERVICES", 140, headerY + 15);
+        doc.fontSize(14).text("PURCHASE INVOICE", 140, headerY + 40);
 
-        // --- Boxed Details Section
-        const startY = headerY + 80; // spacing below header
-        const boxHeight = 80;
+        // --- First Row (Supplier | Purchaser | Vehicle Reg No)
+        const startY = headerY + 80;
+        const boxHeight = 60;
+        doc.rect(50, startY, 170, boxHeight).stroke();
+        doc.rect(220, startY, 170, boxHeight).stroke();
+        doc.rect(390, startY, 170, boxHeight).stroke();
 
-        doc.rect(50, startY, 510, boxHeight).stroke();
-        doc.moveTo(50, startY + boxHeight / 2).lineTo(560, startY + boxHeight / 2).stroke();
-        doc.moveTo(200, startY).lineTo(200, startY + boxHeight).stroke();
-        doc.moveTo(350, startY).lineTo(350, startY + boxHeight).stroke();
+        doc.font("Helvetica-Bold").fontSize(10);
+        doc.text("Supplier:", 55, startY + 8);
+        doc.text("Purchaser:", 225, startY + 8);
+        doc.text("Vehicle Reg No:", 395, startY + 8);
 
-        // --- Details Labels & Values
-        const details = [
-            [
-                { label: "Purchaser:", value: invoice.purchaser?.username || "" },
-                { label: "Vehicle Reg No:", value: invoice.booking?.vehicleRegNo || "" },
-                { label: "Supplier:", value: `${invoice.supplier?.name || ""} (${invoice.supplier?.contact || ""})` },
-            ],
-            [
-                { label: "Payment Date:", value: invoice.paymentDate ? new Date(invoice.paymentDate).toLocaleDateString("en-GB") : "" },
-                { label: "Vendor Invoice #:", value: invoice.vendorInvoiceNumber || "" },
-                { label: "Discount:", value: `£${safeNumber(invoice.discount).toFixed(2)}` },
-            ],
-        ];
+        doc.font("Helvetica").fontSize(10);
+        doc.text(`${invoice.supplier?.name || ""} (${invoice.supplier?.contact || ""})`, 55, startY + 25, { width: 160 });
+        doc.text(invoice.purchaser?.username || "", 225, startY + 25, { width: 160 });
+        doc.text(invoice.booking?.vehicleRegNo || "", 395, startY + 25, { width: 160 });
 
-        const columnOffset = 10; // horizontal padding inside each column
+        // --- Second Row (Vendor Invoice # | Payment Date)
+        const row2Y = startY + boxHeight + 10;
+        doc.rect(50, row2Y, 255, boxHeight).stroke();
+        doc.rect(305, row2Y, 255, boxHeight).stroke();
 
-        details.forEach((row, rowIndex) => {
-            row.forEach((cell, i) => {
-                const xPos = 50 + i * 150 + columnOffset; // add horizontal spacing
-                doc.font("Helvetica-Bold").fontSize(10).text(cell.label, xPos, startY + 5 + rowIndex * 40);
-                doc.font("Helvetica").text(cell.value, xPos, startY + 20 + rowIndex * 40);
-            });
-        });
+        doc.font("Helvetica-Bold").text("Vendor Invoice #:", 55, row2Y + 8);
+        doc.font("Helvetica-Bold").text("Payment Date:", 310, row2Y + 8);
 
-        doc.moveDown(6);
+        doc.font("Helvetica").text(invoice.vendorInvoiceNumber || "", 55, row2Y + 25, { width: 240 });
+        doc.text(invoice.paymentDate ? new Date(invoice.paymentDate).toLocaleDateString("en-GB") : "", 310, row2Y + 25, { width: 240 });
 
-        // --- Table Headers
+        // --- Parts Table (no Part Number)
+        let tableTop = row2Y + boxHeight + 30;
         const rowHeight = 20;
-        let tableTop = startY + boxHeight + 40;
-        const positions = [50, 220, 350, 420, 500, 560];
+        const positions = [50, 300, 400, 500];
 
-        const drawTableRow = (y, row, bold = false) => {
+        const drawRow = (y, row, bold = false) => {
             doc.font(bold ? "Helvetica-Bold" : "Helvetica");
-            for (let i = 0; i < row.length; i++) {
+            row.forEach((text, i) => {
                 const x = positions[i];
-                const cellWidth = positions[i + 1] - positions[i];
+                const cellWidth = (positions[i + 1] || 560) - positions[i];
                 doc.rect(x, y, cellWidth, rowHeight).stroke();
-                doc.text(row[i], x + 8, y + 5);
-            }
+                doc.text(text, x + 8, y + 5);
+            });
         };
 
-        drawTableRow(tableTop, ["Part Name", "Part Number", "QTY", "Rate (£)", "Total (£)"], true);
+        drawRow(tableTop, ["Part Name", "QTY", "Rate (£)", "Total (£)"], true);
         tableTop += rowHeight;
 
-        let subTotal = 0;
+        let netAmount = 0;
         (invoice.items || []).forEach((item) => {
             const qty = safeNumber(item.quantity);
             const rate = safeNumber(item.rate);
             const lineTotal = qty * rate;
-            subTotal += lineTotal;
+            netAmount += lineTotal;
 
-            drawTableRow(tableTop, [
+            drawRow(tableTop, [
                 item.part?.partName || "Unknown",
-                item.part?.partNumber || "-",
                 String(qty),
                 rate.toFixed(2),
                 lineTotal.toFixed(2),
@@ -118,19 +105,19 @@ export const exportPurchaseInvoicePDF = async (req, res) => {
             tableTop += rowHeight;
         });
 
-        // --- VAT and Total Section
+        // --- Summary
         const discount = safeNumber(invoice.discount);
-        const totalAmount = subTotal - discount;
-        const summaryBoxY = tableTop + 20;
+        const vatAmount = invoice.vatIncluded ? (netAmount - discount) * 0.2 : 0;
+        const grossTotal = netAmount - discount + vatAmount;
+
+        const summaryY = tableTop + 30;
         doc.font("Helvetica-Bold").fontSize(11);
-
-        doc.rect(400, summaryBoxY, 160, 20).stroke();
-        doc.text(`VAT Included: ${invoice.vatIncluded ? "Yes" : "No"}`, 405, summaryBoxY + 5);
-
-        doc.rect(400, summaryBoxY + 25, 160, 70).stroke();
-        doc.text(`Subtotal: £${subTotal.toFixed(2)}`, 405, summaryBoxY + 30);
-        doc.text(`Discount: £${discount.toFixed(2)}`, 405, summaryBoxY + 45);
-        doc.text(`Total: £${totalAmount.toFixed(2)}`, 405, summaryBoxY + 60);
+        doc.text(`Net Amount: £${netAmount.toFixed(2)}`, 400, summaryY);
+        doc.text(`Discount: £${discount.toFixed(2)}`, 400, summaryY + 15);
+        if (invoice.vatIncluded) {
+            doc.text(`VAT (20%): £${vatAmount.toFixed(2)}`, 400, summaryY + 30);
+        }
+        doc.font("Helvetica-Bold").text(`Gross Total: £${grossTotal.toFixed(2)}`, 400, summaryY + 45);
 
         doc.end();
     } catch (err) {
