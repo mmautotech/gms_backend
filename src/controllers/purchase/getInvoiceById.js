@@ -9,10 +9,8 @@ const POPULATE_CONFIG = [
 
 export const getPurchaseInvoiceById = async (req, res) => {
     try {
+        // Only filter by invoice ID and active status
         const filter = { _id: req.params.id, isActive: true };
-        if (req.user.userType !== "admin") {
-            filter.purchaser = req.user._id;
-        }
 
         const invoice = await PurchaseInvoice.findOne(filter).populate(POPULATE_CONFIG);
 
@@ -29,7 +27,7 @@ export const getPurchaseInvoiceById = async (req, res) => {
                 id: req.params.id,
             },
             pagination: null,
-            data: [invoice], // ✅ keep array for consistency
+            data: [invoice], // keep array for consistency
         });
     } catch (err) {
         console.error("Get Invoice By ID Error:", err);
