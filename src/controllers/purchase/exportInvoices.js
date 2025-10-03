@@ -16,7 +16,7 @@ export const exportPurchaseInvoicePDF = async (req, res) => {
             .populate("supplier", "name contact")
             .populate("purchaser", "username")
             .populate("booking", "vehicleRegNo status scheduledDate")
-            .populate("items.part", "partName partNumber price")
+            .populate("items.part", "partName price") // Removed partNumber
             .lean();
 
         if (!invoice) {
@@ -44,12 +44,12 @@ export const exportPurchaseInvoicePDF = async (req, res) => {
 
         // --- Header: Logo + Company Name
         const headerY = 45;
-        doc.image(logoPath, 50, headerY, { width: 80 }); // logo on left
+        doc.image(logoPath, 50, headerY, { width: 80 });
         doc.font("Helvetica-Bold").fontSize(18).text("PERIVALE MOTOR SERVICES", 140, headerY + 15, { align: "left" });
         doc.fontSize(14).text("PURCHASE INVOICE", 140, headerY + 40, { align: "left" });
 
         // --- Boxed Details Section
-        const startY = headerY + 80; // spacing below header
+        const startY = headerY + 80;
         const boxHeight = 80;
 
         doc.rect(50, startY, 510, boxHeight).stroke();
@@ -71,11 +71,10 @@ export const exportPurchaseInvoicePDF = async (req, res) => {
             ],
         ];
 
-        const columnOffset = 10; // horizontal padding inside each column
-
+        const columnOffset = 10;
         details.forEach((row, rowIndex) => {
             row.forEach((cell, i) => {
-                const xPos = 50 + i * 150 + columnOffset; // add horizontal spacing
+                const xPos = 50 + i * 150 + columnOffset;
                 doc.font("Helvetica-Bold").fontSize(10).text(cell.label, xPos, startY + 5 + rowIndex * 40);
                 doc.font("Helvetica").text(cell.value, xPos, startY + 20 + rowIndex * 40);
             });
@@ -86,19 +85,21 @@ export const exportPurchaseInvoicePDF = async (req, res) => {
         // --- Table Headers
         const rowHeight = 20;
         let tableTop = startY + boxHeight + 40;
-        const positions = [50, 220, 350, 420, 500, 560];
+
+        // Updated positions since Part Number removed
+        const positions = [50, 300, 400, 470, 540]; // Part Name, QTY, Rate, Total
 
         const drawTableRow = (y, row, bold = false) => {
             doc.font(bold ? "Helvetica-Bold" : "Helvetica");
             for (let i = 0; i < row.length; i++) {
                 const x = positions[i];
-                const cellWidth = positions[i + 1] - positions[i];
+                const cellWidth = positions[i + 1] ? positions[i + 1] - positions[i] : 540 - positions[i];
                 doc.rect(x, y, cellWidth, rowHeight).stroke();
                 doc.text(row[i], x + 8, y + 5);
             }
         };
 
-        drawTableRow(tableTop, ["Part Name", "Part Number", "QTY", "Rate (£)", "Total (£)"], true);
+        drawTableRow(tableTop, ["Part Name", "QTY", "Rate (£)", "Total (£)"], true);
         tableTop += rowHeight;
 
         let subTotal = 0;
@@ -110,7 +111,6 @@ export const exportPurchaseInvoicePDF = async (req, res) => {
 
             drawTableRow(tableTop, [
                 item.part?.partName || "Unknown",
-                item.part?.partNumber || "-",
                 String(qty),
                 rate.toFixed(2),
                 lineTotal.toFixed(2),
@@ -120,17 +120,18 @@ export const exportPurchaseInvoicePDF = async (req, res) => {
 
         // --- VAT and Total Section
         const discount = safeNumber(invoice.discount);
-        const totalAmount = subTotal - discount;
+        const vatAmount = invoice.vatIncluded ? subTotal * 0.2 : 0; // 20% if included, else 0
+        const totalAmount = subTotal + vatAmount - discount;
+
         const summaryBoxY = tableTop + 20;
         doc.font("Helvetica-Bold").fontSize(11);
 
-        doc.rect(400, summaryBoxY, 160, 20).stroke();
-        doc.text(`VAT Included: ${invoice.vatIncluded ? "Yes" : "No"}`, 405, summaryBoxY + 5);
-
-        doc.rect(400, summaryBoxY + 25, 160, 70).stroke();
+        // Summary Box
+        doc.rect(400, summaryBoxY + 25, 160, 90).stroke(); // taller box
         doc.text(`Subtotal: £${subTotal.toFixed(2)}`, 405, summaryBoxY + 30);
-        doc.text(`Discount: £${discount.toFixed(2)}`, 405, summaryBoxY + 45);
-        doc.text(`Total: £${totalAmount.toFixed(2)}`, 405, summaryBoxY + 60);
+        doc.text(`VAT (20%): £${vatAmount.toFixed(2)}`, 405, summaryBoxY + 50);
+        doc.text(`Discount: £${discount.toFixed(2)}`, 405, summaryBoxY + 70);
+        doc.text(`Total: £${totalAmount.toFixed(2)}`, 405, summaryBoxY + 90);
 
         doc.end();
     } catch (err) {
