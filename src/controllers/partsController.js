@@ -1,61 +1,40 @@
-// controllers/partsController.js
 import Part from "../models/Part.js";
 import Service from "../models/Service.js";
 import Booking from "../models/Booking.js";
 
 const handleError = (error, res) => {
     if (error.code === 11000) {
-        const keys = Object.keys(error.keyValue);
         return res.status(400).json({
             success: false,
-            error: `Duplicate value for fields: ${keys.join(", ")}.`,
-            details: error.keyValue,
+            error: "A part with this name already exists",
         });
     }
     return res.status(500).json({ success: false, error: error.message });
 };
 
-const checkDuplicate = async (partName, partNumber, excludeId = null) => {
-    const query = { partName: partName?.trim(), partNumber: partNumber ?? null };
-    if (excludeId) query._id = { $ne: excludeId };
-    return Part.findOne(query);
-};
-
 // ✅ Create part
 export const createPart = async (req, res) => {
     try {
-        const { partName, partNumber, description } = req.body;
-
-        if (await checkDuplicate(partName, partNumber)) {
-            return res.status(400).json({
-                success: false,
-                error: "A part with this name and number already exists",
-            });
-        }
-
-        const part = await Part.create({ partName, partNumber, description });
+        const { partName } = req.body;
+        const part = await Part.create({ partName });
         return res.status(201).json({ success: true, data: part });
     } catch (error) {
         return handleError(error, res);
     }
 };
 
-// ✅ Get all ACTIVE parts
+// ✅ Get all parts
 export const getParts = async (req, res) => {
     try {
         const { q } = req.query;
-        const filter = { isActive: true };
-
-        if (q) filter.$text = { $search: q };
-
-        const parts = await Part.find(filter).lean();
+        const parts = await Part.find().lean();
         return res.json({ success: true, data: parts });
     } catch (error) {
         return handleError(error, res);
     }
 };
 
-// ✅ Get part by ID (active + inactive, for admin view)
+// ✅ Get part by ID
 export const getPartById = async (req, res) => {
     try {
         const part = await Part.findById(req.params.id).lean();
@@ -69,20 +48,11 @@ export const getPartById = async (req, res) => {
 // ✅ Update part
 export const updatePart = async (req, res) => {
     try {
-        const { partName, partNumber, description } = req.body;
-
-        if (partName || partNumber !== undefined) {
-            if (await checkDuplicate(partName, partNumber, req.params.id)) {
-                return res.status(400).json({
-                    success: false,
-                    error: "A part with this name and number already exists",
-                });
-            }
-        }
+        const { partName } = req.body;
 
         const part = await Part.findByIdAndUpdate(
             req.params.id,
-            { partName, partNumber, description },
+            { partName },
             { new: true, runValidators: true }
         ).lean();
 
@@ -137,14 +107,11 @@ export const activatePart = async (req, res) => {
 // ✅ Dropdown (active parts only)
 export const getPartsDropdown = async (req, res) => {
     try {
-        const parts = await Part.find({ isActive: true })
-            .select("partName partNumber")
-            .sort({ partName: 1 })
-            .lean();
+        const parts = await Part.find({ isActive: true }).select("partName").sort({ partName: 1 }).lean();
 
         const mapped = parts.map((p) => ({
             id: p._id,
-            label: p.partNumber ? `${p.partName} (${p.partNumber})` : p.partName,
+            label: p.partName,
         }));
 
         return res.json({ success: true, data: mapped });
@@ -172,7 +139,7 @@ export const getPartsByBooking = async (req, res) => {
             .populate({
                 path: "parts",
                 match: { isActive: true },
-                select: "partName partNumber isActive",
+                select: "partName isActive",
             })
             .lean();
 
@@ -187,7 +154,7 @@ export const getPartsByBooking = async (req, res) => {
 
         const mapped = [...uniqueParts.values()].map((p) => ({
             id: p._id,
-            label: p.partNumber ? `${p.partName} (${p.partNumber})` : p.partName,
+            label: p.partName,
         }));
 
         return res.json({ success: true, data: mapped });

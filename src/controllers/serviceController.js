@@ -30,6 +30,7 @@ export const getServiceOptions = async (req, res) => {
             meta: { count: services.length, format, filteredByEnabled: enabled ?? null },
         });
     } catch (error) {
+        console.error("❌ getServiceOptions error:", error);
         return res.status(500).json({
             success: false,
             error: "Error fetching service options",
@@ -58,11 +59,25 @@ export const createService = async (req, res) => {
         await service.save();
 
         const populated = await Service.findById(service._id)
-            .populate("parts", "partName partNumber description isActive")
+            .populate({
+                path: "parts",
+                match: { isActive: true },
+                select: "partName isActive",
+            })
             .lean();
 
-        return res.status(201).json({ success: true, data: populated });
+        // normalize parts
+        const normalized = {
+            ...populated,
+            parts: (populated.parts || []).map((p) => ({
+                id: p._id,
+                label: p.partName,
+            })),
+        };
+
+        return res.status(201).json({ success: true, data: normalized });
     } catch (error) {
+        console.error("❌ createService error:", error);
         return res.status(500).json({
             success: false,
             error: "Error creating service",
@@ -87,6 +102,7 @@ export const getAllServices = async (_req, res) => {
 
         return res.json({ success: true, data: withCounts });
     } catch (error) {
+        console.error("❌ getAllServices error:", error);
         return res.status(500).json({
             success: false,
             error: "Error fetching services",
@@ -105,15 +121,21 @@ export const getServiceById = async (req, res) => {
         }
 
         const service = await Service.findById(id)
-            .populate("parts", "partName partNumber description isActive")
+            .populate({
+                path: "parts",
+                match: { isActive: true },       // only active parts
+                select: "partName partNumber description isActive", // return full fields
+            })
             .lean();
 
         if (!service) {
             return res.status(404).json({ success: false, error: "Service not found" });
         }
 
+        // ⚡ return raw service + parts (like getParts)
         return res.json({ success: true, data: service });
     } catch (error) {
+        console.error("❌ getServiceById error:", error);
         return res.status(500).json({
             success: false,
             error: "Error fetching service",
@@ -122,7 +144,7 @@ export const getServiceById = async (req, res) => {
 };
 
 /**
- * Update a service and return full updated doc
+ * Update a service
  */
 export const updateService = async (req, res) => {
     try {
@@ -154,11 +176,24 @@ export const updateService = async (req, res) => {
         await service.save();
 
         const populated = await Service.findById(id)
-            .populate("parts", "partName partNumber description isActive")
+            .populate({
+                path: "parts",
+                match: { isActive: true },
+                select: "partName isActive",
+            })
             .lean();
 
-        return res.json({ success: true, data: populated, message: "Service updated successfully" });
+        const normalized = {
+            ...populated,
+            parts: (populated.parts || []).map((p) => ({
+                id: p._id,
+                label: p.partName,
+            })),
+        };
+
+        return res.json({ success: true, data: normalized, message: "Service updated successfully" });
     } catch (error) {
+        console.error("❌ updateService error:", error);
         return res.status(500).json({
             success: false,
             error: "Error updating service",
@@ -167,20 +202,33 @@ export const updateService = async (req, res) => {
 };
 
 /**
- * Soft delete a service and return updated doc
+ * Soft delete a service
  */
 export const deleteService = async (req, res) => {
     try {
         const { id } = req.params;
 
         const service = await Service.findByIdAndUpdate(id, { enabled: false }, { new: true })
-            .populate("parts", "partName partNumber description isActive")
+            .populate({
+                path: "parts",
+                match: { isActive: true },
+                select: "partName isActive",
+            })
             .lean();
 
         if (!service) return res.status(404).json({ success: false, error: "Service not found" });
 
-        return res.json({ success: true, data: service, message: "Service disabled successfully" });
+        const normalized = {
+            ...service,
+            parts: (service.parts || []).map((p) => ({
+                id: p._id,
+                label: p.partName,
+            })),
+        };
+
+        return res.json({ success: true, data: normalized, message: "Service disabled successfully" });
     } catch (error) {
+        console.error("❌ deleteService error:", error);
         return res.status(500).json({
             success: false,
             error: "Error disabling service",
@@ -189,20 +237,33 @@ export const deleteService = async (req, res) => {
 };
 
 /**
- * Reactivate a service and return updated doc
+ * Reactivate a service
  */
 export const activateService = async (req, res) => {
     try {
         const { id } = req.params;
 
         const service = await Service.findByIdAndUpdate(id, { enabled: true }, { new: true })
-            .populate("parts", "partName partNumber description isActive")
+            .populate({
+                path: "parts",
+                match: { isActive: true },
+                select: "partName isActive",
+            })
             .lean();
 
         if (!service) return res.status(404).json({ success: false, error: "Service not found" });
 
-        return res.json({ success: true, data: service, message: "Service reactivated successfully" });
+        const normalized = {
+            ...service,
+            parts: (service.parts || []).map((p) => ({
+                id: p._id,
+                label: p.partName,
+            })),
+        };
+
+        return res.json({ success: true, data: normalized, message: "Service reactivated successfully" });
     } catch (error) {
+        console.error("❌ activateService error:", error);
         return res.status(500).json({
             success: false,
             error: "Error reactivating service",
@@ -211,7 +272,7 @@ export const activateService = async (req, res) => {
 };
 
 /**
- * Get parts of a service only (full part docs)
+ * Get parts of a service only
  */
 export const getServiceParts = async (req, res) => {
     try {
@@ -221,15 +282,25 @@ export const getServiceParts = async (req, res) => {
         }
 
         const service = await Service.findById(id)
-            .populate("parts", "partName partNumber description isActive")
+            .populate({
+                path: "parts",
+                match: { isActive: true },
+                select: "partName isActive",
+            })
             .lean();
 
         if (!service) {
             return res.status(404).json({ success: false, error: "Service not found" });
         }
 
-        return res.json({ success: true, data: service.parts });
+        const mapped = (service.parts || []).map((p) => ({
+            id: p._id,
+            label: p.partName,
+        }));
+
+        return res.json({ success: true, data: mapped });
     } catch (error) {
+        console.error("❌ getServiceParts error:", error);
         return res.status(500).json({
             success: false,
             error: "Error fetching service parts",

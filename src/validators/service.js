@@ -1,4 +1,3 @@
-// validators/service.js
 import { body, param } from "express-validator";
 
 // helper for ObjectId

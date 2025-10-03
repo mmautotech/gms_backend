@@ -11,9 +11,13 @@ import {
 } from "../validators/purchaseInvoice.js";
 
 import * as purchaseController from "../controllers/purchase/index.js";
-import { getInvoicebyidDash } from "../controllers/purchase/getInvoicebyidDash.js"; // ✅ default import
 
 const router = express.Router();
+
+router.get(
+    "/export/pdf/invoice/:invoiceId",
+    purchaseController.exportPurchaseInvoicePDF
+);
 
 // 🔐 All routes require authentication
 router.use(requireAuth);
@@ -42,7 +46,7 @@ router.get(
 // --- Get invoices by booking ID for dashboard ---
 router.get(
     "/booking/:bookingId",
-    getInvoicebyidDash // ✅ use the imported controller directly
+    purchaseController.getInvoicebyidDash // ✅ use the imported controller directly
 );
 
 // --- Update invoice status (any authenticated user) ---
@@ -60,6 +64,7 @@ router.put(
     validateWithZod(updatePurchaseInvoiceSchema, "body"),
     purchaseController.updatePurchaseInvoice
 );
+
 
 // --- Admin-only delete ---
 router.delete(
