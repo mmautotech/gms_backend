@@ -85,7 +85,7 @@ export const getDashboardStats = async (req, res) => {
         ]);
 
         /** -------------------------------
-         * Service Trends by Interval
+         * Service Trends by Interval (FIXED)
          -------------------------------- */
         const serviceTrends = {};
         const intervals = [
@@ -96,8 +96,16 @@ export const getDashboardStats = async (req, res) => {
         ];
 
         for (const interval of intervals) {
+            // Match bookings that have prebookingServices
             const matchStage = { prebookingServices: { $ne: null } };
-            if (interval.start) matchStage.bookingDate = { $gte: interval.start, $lte: today };
+
+            // Daily/weekly filtering using bookingDate OR fallback to createdAt
+            if (interval.start) {
+                matchStage.$or = [
+                    { bookingDate: { $gte: interval.start, $lte: today } },
+                    { bookingDate: null, createdAt: { $gte: interval.start, $lte: today } },
+                ];
+            }
 
             const data = await Booking.aggregate([
                 { $unwind: "$prebookingServices" },
@@ -106,7 +114,12 @@ export const getDashboardStats = async (req, res) => {
                     $group: {
                         _id: {
                             service: "$prebookingServices",
-                            period: { $dateToString: { format: interval.format, date: "$bookingDate" } },
+                            period: {
+                                $dateToString: {
+                                    format: interval.format,
+                                    date: { $ifNull: ["$bookingDate", "$createdAt"] },
+                                },
+                            },
                         },
                         count: { $sum: 1 },
                     },
@@ -122,7 +135,7 @@ export const getDashboardStats = async (req, res) => {
                 { $unwind: "$service" },
                 {
                     $project: {
-                        service: "$service.name",
+                        service: { $ifNull: ["$service.name", "$_id.service"] },
                         period: "$_id.period",
                         count: 1,
                     },
