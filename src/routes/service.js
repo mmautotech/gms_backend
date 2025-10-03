@@ -9,20 +9,18 @@ import {
   deleteServiceValidator,
   activateServiceValidator,
   getServicePartsValidator,
-  addPartsValidator,
-  removePartsValidator,
+  getServiceByIdValidator,
 } from "../validators/service.js";
 
 import {
   createService,
   getAllServices,
+  getServiceById,
   getServiceOptions,
   getServiceParts,
   updateService,
   deleteService,
   activateService,
-  addPartToService,
-  removePartFromService,
 } from "../controllers/serviceController.js";
 
 const router = express.Router();
@@ -36,15 +34,14 @@ router.get("/options", getServiceOptions);
 // --- CRUD ---
 router.post("/", validate, ...createServiceValidator, createService);
 router.get("/", getAllServices);
+router.get("/:id", validate, ...getServiceByIdValidator, getServiceById);
 router.patch("/:id", validate, ...updateServiceValidator, updateService);
 
 // --- SOFT DELETE & ACTIVATE ---
 router.delete("/:id", validate, ...deleteServiceValidator, deleteService);
 router.patch("/:id/activate", validate, ...activateServiceValidator, activateService);
 
-// --- PARTS MANAGEMENT ---
+// --- PARTS ---
 router.get("/:id/parts", validate, ...getServicePartsValidator, getServiceParts);
-router.post("/:id/add-parts", validate, ...addPartsValidator, addPartToService);
-router.post("/:id/remove-parts", validate, ...removePartsValidator, removePartFromService);
 
 export default router;

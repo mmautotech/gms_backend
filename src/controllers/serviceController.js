@@ -1,6 +1,5 @@
 // controllers/serviceController.js
 import Service from "../models/Service.js";
-import Part from "../models/Part.js";   // ✅ Missing import added
 import mongoose from "mongoose";
 
 /**
@@ -34,7 +33,6 @@ export const getServiceOptions = async (req, res) => {
         return res.status(500).json({
             success: false,
             error: "Error fetching service options",
-            details: error.message,
         });
     }
 };
@@ -50,7 +48,8 @@ export const createService = async (req, res) => {
             return res.status(400).json({ success: false, error: "Service name is required" });
         }
 
-        const exists = await Service.findOne({ name });
+        // Case-insensitive duplicate check
+        const exists = await Service.findOne({ name: { $regex: new RegExp(`^${name}$`, "i") } });
         if (exists) {
             return res.status(400).json({ success: false, error: "Service already exists" });
         }
@@ -58,67 +57,72 @@ export const createService = async (req, res) => {
         const service = new Service({ name, enabled, parts });
         await service.save();
 
-        const populated = await service.populate("parts", "partName partNumber isActive");
+        const populated = await Service.findById(service._id)
+            .populate("parts", "partName partNumber description isActive")
+            .lean();
+
         return res.status(201).json({ success: true, data: populated });
     } catch (error) {
         return res.status(500).json({
             success: false,
             error: "Error creating service",
-            details: error.message,
         });
     }
 };
 
 /**
- * Get all services (no parts in response)
+ * Get all services (return parts IDs + partsCount)
  */
 export const getAllServices = async (_req, res) => {
     try {
         const services = await Service.find()
-            .select("_id name enabled createdAt updatedAt")
-            .sort({ createdAt: -1 });
+            .select("_id name enabled createdAt updatedAt parts")
+            .sort({ createdAt: -1 })
+            .lean();
 
-        return res.json({ success: true, data: services });
+        const withCounts = services.map((s) => ({
+            ...s,
+            partsCount: s.parts?.length || 0,
+        }));
+
+        return res.json({ success: true, data: withCounts });
     } catch (error) {
         return res.status(500).json({
             success: false,
             error: "Error fetching services",
-            details: error.message,
         });
     }
 };
 
 /**
- * Get parts of a single service (active & inactive)
+ * Get a single service by ID (with full parts populated)
  */
-export const getServiceParts = async (req, res) => {
+export const getServiceById = async (req, res) => {
     try {
         const { id } = req.params;
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({ success: false, error: "Invalid service ID" });
         }
 
-        const service = await Service.findById(id).populate("parts", "partName partNumber isActive");
-        if (!service) return res.status(404).json({ success: false, error: "Service not found" });
+        const service = await Service.findById(id)
+            .populate("parts", "partName partNumber description isActive")
+            .lean();
 
-        const mapped = service.parts.map((p) => ({
-            id: p._id,
-            label: p.partNumber ? `${p.partName} (${p.partNumber})` : p.partName,
-            isActive: p.isActive,
-        }));
+        if (!service) {
+            return res.status(404).json({ success: false, error: "Service not found" });
+        }
 
-        return res.json({ success: true, data: mapped });
+        return res.json({ success: true, data: service });
     } catch (error) {
         return res.status(500).json({
             success: false,
-            error: "Error fetching service parts",
-            details: error.message,
+            error: "Error fetching service",
         });
     }
 };
 
 /**
- * Update a service
+ * Update a service and return full updated doc
  */
 export const updateService = async (req, res) => {
     try {
@@ -132,117 +136,103 @@ export const updateService = async (req, res) => {
         const service = await Service.findById(id);
         if (!service) return res.status(404).json({ success: false, error: "Service not found" });
 
+        // duplicate name check (exclude self)
+        if (name && name.toLowerCase() !== service.name.toLowerCase()) {
+            const exists = await Service.findOne({
+                _id: { $ne: id },
+                name: { $regex: new RegExp(`^${name}$`, "i") },
+            });
+            if (exists) {
+                return res.status(400).json({ success: false, error: "Service name already exists" });
+            }
+        }
+
         if (name !== undefined) service.name = name;
         if (enabled !== undefined) service.enabled = enabled;
         if (Array.isArray(parts)) service.parts = parts;
 
         await service.save();
 
-        return res.json({ success: true, message: "Service updated successfully" });
+        const populated = await Service.findById(id)
+            .populate("parts", "partName partNumber description isActive")
+            .lean();
+
+        return res.json({ success: true, data: populated, message: "Service updated successfully" });
     } catch (error) {
         return res.status(500).json({
             success: false,
             error: "Error updating service",
-            details: error.message,
         });
     }
 };
 
 /**
- * Soft delete a service
+ * Soft delete a service and return updated doc
  */
 export const deleteService = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const service = await Service.findByIdAndUpdate(id, { enabled: false }, { new: true });
+        const service = await Service.findByIdAndUpdate(id, { enabled: false }, { new: true })
+            .populate("parts", "partName partNumber description isActive")
+            .lean();
+
         if (!service) return res.status(404).json({ success: false, error: "Service not found" });
 
-        return res.json({ success: true, message: "Service disabled successfully" });
+        return res.json({ success: true, data: service, message: "Service disabled successfully" });
     } catch (error) {
         return res.status(500).json({
             success: false,
             error: "Error disabling service",
-            details: error.message,
         });
     }
 };
 
 /**
- * Reactivate a service
+ * Reactivate a service and return updated doc
  */
 export const activateService = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const service = await Service.findByIdAndUpdate(id, { enabled: true }, { new: true });
+        const service = await Service.findByIdAndUpdate(id, { enabled: true }, { new: true })
+            .populate("parts", "partName partNumber description isActive")
+            .lean();
+
         if (!service) return res.status(404).json({ success: false, error: "Service not found" });
 
-        return res.json({ success: true, message: "Service reactivated successfully" });
+        return res.json({ success: true, data: service, message: "Service reactivated successfully" });
     } catch (error) {
         return res.status(500).json({
             success: false,
             error: "Error reactivating service",
-            details: error.message,
         });
     }
 };
 
 /**
- * Add part(s) to a service
+ * Get parts of a service only (full part docs)
  */
-export const addPartToService = async (req, res) => {
+export const getServiceParts = async (req, res) => {
     try {
         const { id } = req.params;
-        let { partId, partIds } = req.body;
-
-        if (partId) partIds = [partId];
-        if (!Array.isArray(partIds) || partIds.length === 0) {
-            return res.status(400).json({ success: false, error: "partIds required" });
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, error: "Invalid service ID" });
         }
 
-        const validParts = await Part.find({ _id: { $in: partIds } }).select("_id");
-        if (validParts.length === 0) {
-            return res.status(400).json({ success: false, error: "No valid partIds found" });
+        const service = await Service.findById(id)
+            .populate("parts", "partName partNumber description isActive")
+            .lean();
+
+        if (!service) {
+            return res.status(404).json({ success: false, error: "Service not found" });
         }
 
-        const service = await Service.findByIdAndUpdate(
-            id,
-            { $addToSet: { parts: { $each: validParts.map((p) => p._id) } } },
-            { new: true }
-        );
-
-        if (!service) return res.status(404).json({ success: false, error: "Service not found" });
-
-        return res.json({ success: true, message: "Parts added successfully" });
+        return res.json({ success: true, data: service.parts });
     } catch (error) {
-        return res.status(500).json({ success: false, error: error.message });
-    }
-};
-
-/**
- * Remove part(s) from a service
- */
-export const removePartFromService = async (req, res) => {
-    try {
-        const { id } = req.params;
-        let { partId, partIds } = req.body;
-
-        if (partId) partIds = [partId];
-        if (!Array.isArray(partIds) || partIds.length === 0) {
-            return res.status(400).json({ success: false, error: "partIds required" });
-        }
-
-        const service = await Service.findByIdAndUpdate(
-            id,
-            { $pull: { parts: { $in: partIds } } },
-            { new: true }
-        );
-
-        if (!service) return res.status(404).json({ success: false, error: "Service not found" });
-
-        return res.json({ success: true, message: "Parts removed successfully" });
-    } catch (error) {
-        return res.status(500).json({ success: false, error: error.message });
+        return res.status(500).json({
+            success: false,
+            error: "Error fetching service parts",
+        });
     }
 };

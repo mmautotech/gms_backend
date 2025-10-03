@@ -1,24 +1,27 @@
 // validators/service.js
 import { body, param } from "express-validator";
 
+// helper for ObjectId
+const objectIdRegex = /^[0-9a-fA-F]{24}$/;
+
 // ✅ Create Service Validator
 export const createServiceValidator = [
     body("name")
         .trim()
-        .notEmpty()
-        .withMessage("Service name is required")
-        .isLength({ min: 2, max: 50 })
-        .withMessage("Service name must be between 2 and 50 characters"),
+        .notEmpty().withMessage("Service name is required")
+        .isLength({ min: 2, max: 50 }).withMessage("Service name must be between 2 and 50 characters"),
 
     body("enabled")
         .optional()
-        .isBoolean()
-        .withMessage("Enabled must be true or false"),
+        .isBoolean().withMessage("Enabled must be true or false"),
 
     body("parts")
         .optional()
-        .isArray()
-        .withMessage("Parts must be an array of ObjectIds"),
+        .isArray().withMessage("Parts must be an array of ObjectIds"),
+
+    body("parts.*")
+        .optional()
+        .matches(objectIdRegex).withMessage("Each part must be a valid ObjectId"),
 ];
 
 // ✅ Update Service Validator
@@ -28,58 +31,29 @@ export const updateServiceValidator = [
     body("name")
         .optional()
         .trim()
-        .isLength({ min: 2, max: 50 })
-        .withMessage("Service name must be between 2 and 50 characters"),
+        .isLength({ min: 2, max: 50 }).withMessage("Service name must be between 2 and 50 characters"),
 
     body("enabled")
         .optional()
-        .isBoolean()
-        .withMessage("Enabled must be true or false"),
+        .isBoolean().withMessage("Enabled must be true or false"),
 
     body("parts")
         .optional()
-        .isArray()
-        .withMessage("Parts must be an array of ObjectIds"),
+        .isArray().withMessage("Parts must be an array of ObjectIds"),
+
+    body("parts.*")
+        .optional()
+        .matches(objectIdRegex).withMessage("Each part must be a valid ObjectId"),
 ];
 
 // ✅ Soft Delete Service Validator
-export const deleteServiceValidator = [
-    param("id").isMongoId().withMessage("Invalid service ID"),
-];
+export const deleteServiceValidator = [param("id").isMongoId().withMessage("Invalid service ID")];
 
 // ✅ Reactivate Service Validator
-export const activateServiceValidator = [
-    param("id").isMongoId().withMessage("Invalid service ID"),
-];
+export const activateServiceValidator = [param("id").isMongoId().withMessage("Invalid service ID")];
 
 // ✅ Get Service Parts Validator
-export const getServicePartsValidator = [
-    param("id").isMongoId().withMessage("Invalid service ID"),
-];
+export const getServicePartsValidator = [param("id").isMongoId().withMessage("Invalid service ID")];
 
-// ✅ Add Parts Validator (single OR multiple)
-export const addPartsValidator = [
-    param("id").isMongoId().withMessage("Invalid service ID"),
-    body().custom((body) => {
-        if (!body.partId && !body.partIds) {
-            throw new Error("Either partId or partIds is required");
-        }
-        if (body.partId && !/^[0-9a-fA-F]{24}$/.test(body.partId)) {
-            throw new Error("Invalid partId");
-        }
-        if (body.partIds) {
-            if (!Array.isArray(body.partIds) || body.partIds.length === 0) {
-                throw new Error("partIds must be a non-empty array");
-            }
-            body.partIds.forEach((id) => {
-                if (!/^[0-9a-fA-F]{24}$/.test(id)) {
-                    throw new Error(`Invalid ObjectId in partIds: ${id}`);
-                }
-            });
-        }
-        return true;
-    }),
-];
-
-// ✅ Remove Parts Validator (same as add)
-export const removePartsValidator = addPartsValidator;
+// ✅ Get Service By ID Validator
+export const getServiceByIdValidator = [param("id").isMongoId().withMessage("Invalid service ID")];
