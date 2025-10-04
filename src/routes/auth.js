@@ -1,55 +1,30 @@
-// src/routes/authRoutes.js
 import express from "express";
-import {
-    login,
-    register,
-    forgotPassword,
-    adminChangePassword,
-    getAllUsers
-} from "../controllers/authController.js";
+import { validate } from "../middleware/validate.js";
+import { requireAuth, requireRole } from "../middleware/auth.js";
 import {
     loginValidator,
     registerValidator,
-    forgotPasswordValidator,
     adminChangePasswordValidator,
 } from "../validators/auth.js";
-import { validate } from "../middleware/validate.js";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import {
+    login,
+    register,
+    adminChangePassword,
+    getAllUsers,
+    logout,
+} from "../controllers/authController.js";
 
 const router = express.Router();
 
-// 🔹 Login (public)
+// 🔹 Public
 router.post("/login", loginValidator, validate, login);
 
-// 🔹 Register (admin creates user) - admin only
-router.post(
-    "/register",
-    requireAuth,
-    requireRole("admin"),
-    registerValidator,
-    validate,
-    register
-);
-
-// 🔹 Forgot password (all users) - public if you want regular users to reset
-router.post(
-    "/forgot-password",
-    forgotPasswordValidator,
-    validate,
-    forgotPassword
-);
-
-// 🔹 Admin changes any user's password - admin only
-router.post(
-    "/admin-change-password",
-    requireAuth,
-    requireRole("admin"),
-    adminChangePasswordValidator,
-    validate,
-    adminChangePassword
-);
-
-
+// 🔹 Admin-only routes
+router.post("/register", requireAuth, requireRole("admin"), registerValidator, validate, register);
+router.post("/admin-change-password", requireAuth, requireRole("admin"), adminChangePasswordValidator, validate, adminChangePassword);
 router.get("/users", requireAuth, requireRole("admin"), getAllUsers);
+
+// 🔹 Session end
+router.post("/logout", requireAuth, logout);
 
 export default router;
