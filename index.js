@@ -22,11 +22,16 @@ const app = express();
  * 🔐 CORS Configuration
  -------------------------------- */
 const corsOptions = {
-    origin: 'http://localhost:3000', // frontend/electron URL
+    origin: [
+        'http://localhost:3000',
+        'http://192.168.18.84:3000', // for frontend running on another PC
+        'http://192.168.18.84'       // for built Electron app
+    ],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
 };
+
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions)); // preflight
 
@@ -91,9 +96,10 @@ mongoose
     .connect(MONGO_URI, { dbName: 'gms_db' })
     .then(() => {
         console.log('✅ MongoDB connected to gms_db');
-        app.listen(PORT, () => {
-            console.log(`🚀 API running at http://localhost:${PORT}`);
+        app.listen(PORT, "0.0.0.0", () => {
+            console.log(`🚀 API running at http://192.168.18.84:${PORT}`);
         });
+
     })
     .catch((err) => {
         console.error('❌ Mongo error:', err);

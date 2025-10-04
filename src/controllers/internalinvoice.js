@@ -30,11 +30,7 @@ export const createInternalInvoice = async (req, res) => {
         if (invoice.items && invoice.items.length > 0) {
             invoice.items.forEach((item) => {
                 const base = item.amount || 0;
-                if (invoice.vatIncluded) {
-                    revenue += base + base * VAT_RATE;
-                } else {
-                    revenue += base;
-                }
+                revenue += invoice.vatIncluded ? base + base * VAT_RATE : base;
             });
         } else {
             revenue = invoice.totalAmount || 0;
@@ -47,11 +43,7 @@ export const createInternalInvoice = async (req, res) => {
         purchaseInvoices.forEach((pi) => {
             pi.items?.forEach((item) => {
                 const base = (item.rate || 0) * (item.quantity || 1);
-                if (pi.vatIncluded) {
-                    cost += base + base * VAT_RATE;
-                } else {
-                    cost += base;
-                }
+                cost += pi.vatIncluded ? base + base * VAT_RATE : base;
             });
         });
 
@@ -102,37 +94,62 @@ export const createInternalInvoice = async (req, res) => {
         res.status(500).json({ message: "Server error" });
     }
 };
+
 /**
  * ✅ Get paginated internal invoices with optional filters
  */
 export const getInternalInvoices = async (req, res) => {
     try {
-        const { page = 1, limit = 10 } = req.query;
+        const { page = 1, limit = 10, fromDate, toDate, vehicleRegNo } = req.query;
 
         const query = {};
 
-        // fetch with population
-        const records = await InternalInvoice.find(query)
+        // Filter by fromDate and toDate
+        if (fromDate || toDate) {
+            query.createdAt = {};
+            if (fromDate) query.createdAt.$gte = new Date(fromDate);
+            if (toDate) {
+                const to = new Date(toDate);
+                to.setHours(23, 59, 59, 999); // include full day
+                query.createdAt.$lte = to;
+            }
+        }
+
+        // Fetch all invoices first
+        let records = await InternalInvoice.find()
             .populate("invoice")
             .populate({
                 path: "purchaseInvoices",
-                populate: {
-                    path: "items.part",
-                    select: "partName",
-                },
+                populate: { path: "items.part", select: "partName" },
             })
-            .populate("booking")
-            .skip((page - 1) * limit)
-            .limit(Number(limit))
-            .sort({ createdAt: -1 });
+            .populate("booking");
 
-        const total = await InternalInvoice.countDocuments(query);
+        // Apply vehicleRegNo filter in memory after population
+        if (vehicleRegNo) {
+            const regex = new RegExp(vehicleRegNo, "i");
+            records = records.filter(
+                (inv) => inv.booking?.vehicleRegNo && regex.test(inv.booking.vehicleRegNo)
+            );
+        }
+
+        // Apply createdAt filter in memory (for safety)
+        if (query.createdAt) {
+            records = records.filter((inv) => {
+                const created = new Date(inv.createdAt);
+                if (query.createdAt.$gte && created < query.createdAt.$gte) return false;
+                if (query.createdAt.$lte && created > query.createdAt.$lte) return false;
+                return true;
+            });
+        }
+
+        // Pagination
+        const total = records.length;
+        const paginatedRecords = records.slice((page - 1) * limit, page * limit);
 
         // format response
-        const data = records.map((inv) => {
+        const data = paginatedRecords.map((inv) => {
             const items = [];
 
-            // from Invoice items
             inv.invoice?.items?.forEach((i) => {
                 items.push({
                     description: i.description,
@@ -146,7 +163,6 @@ export const getInternalInvoices = async (req, res) => {
                 });
             });
 
-            // from ALL Purchase Invoices
             inv.purchaseInvoices?.forEach((pi) => {
                 pi.items?.forEach((i) => {
                     items.push({
@@ -201,16 +217,11 @@ export const getInternalInvoiceById = async (req, res) => {
             .populate("invoice")
             .populate({
                 path: "purchaseInvoices",
-                populate: {
-                    path: "items.part",
-                    select: "partName",
-                },
+                populate: { path: "items.part", select: "partName" },
             })
             .populate("booking");
 
-        if (!inv) {
-            return res.status(404).json({ message: "Internal invoice not found" });
-        }
+        if (!inv) return res.status(404).json({ message: "Internal invoice not found" });
 
         const items = [];
 
