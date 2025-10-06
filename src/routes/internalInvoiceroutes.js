@@ -27,4 +27,10 @@ router.get("/", getInternalInvoices);
  */
 router.get("/:id", getInternalInvoiceById);
 
+// ✅ Inline PDF view for Internal Invoice
+router.get("/:id/pdf/view", async (req, res, next) => {
+    const { viewInternalInvoicePdf } = await import("../controllers/internalinvoice.js");
+    return viewInternalInvoicePdf(req, res, next);
+});
+
 export default router;
