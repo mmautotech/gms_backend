@@ -274,7 +274,7 @@ export const getInternalInvoiceById = async (req, res) => {
 };
 
 // ==========================
-// 🧾 View Internal Invoice PDF Inline (Professional Version)
+// 🧾 View Internal Invoice PDF Inline (with Net VAT)
 // ==========================
 import PDFDocument from "pdfkit";
 import path from "path";
@@ -302,7 +302,7 @@ export const viewInternalInvoicePdf = async (req, res) => {
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `inline; filename=internal_${id}.pdf`);
 
-        const doc = new PDFDocument({ margin: 40 });
+        const doc = new PDFDocument({ margin: 40, size: "A4" });
         doc.pipe(res);
 
         // ------------------ HEADER ------------------
@@ -319,52 +319,53 @@ export const viewInternalInvoicePdf = async (req, res) => {
         doc.moveDown(2);
 
         const startX = 40;
-        const rowH = 20;
+        let rowH = 20;
         let y = doc.y + 10;
 
-        // Draw cell utility
         const drawCell = (text, x, y, w, h, align = "left", bold = false, shaded = false) => {
             if (shaded) {
-                doc.rect(x, y, w, h).fillAndStroke("#f5f5f5", "black");
+                doc.rect(x, y, w, h).fillAndStroke("#f0f0f0", "black");
                 doc.fillColor("#000");
             } else {
                 doc.rect(x, y, w, h).stroke();
                 doc.fillColor("#000");
             }
             doc.font(bold ? "Helvetica-Bold" : "Helvetica")
-                .fontSize(10)
-                .text(text, x + 4, y + 6, { width: w - 8, align });
+                .fontSize(9.5)
+                .text(text, x + 3, y + 5, { width: w - 6, align });
         };
 
         // ------------------ HEADER TABLE ------------------
-        drawCell("INVOICE #", startX, y, 130, rowH, "left", true);
-        drawCell(inv.invoice?.invoiceNo || "N/A", startX + 130, y, 130, rowH);
-        drawCell("Invoice Date", startX + 260, y, 130, rowH, "left", true);
-        drawCell(new Date(inv.createdAt).toLocaleDateString("en-GB"), startX + 390, y, 160, rowH);
+        drawCell("INVOICE #", startX, y, 120, rowH, "left", true);
+        drawCell(inv.invoice?.invoiceNo || "N/A", startX + 120, y, 120, rowH);
+        drawCell("Invoice Date", startX + 240, y, 120, rowH, "left", true);
+        drawCell(new Date(inv.createdAt).toLocaleDateString("en-GB"), startX + 360, y, 160, rowH);
         y += rowH;
 
-        drawCell("Customer Name", startX, y, 130, rowH, "left", true);
-        drawCell(inv.invoice?.customerName || "N/A", startX + 130, y, 130, rowH);
-        drawCell("Contact #", startX + 260, y, 130, rowH, "left", true);
-        drawCell(inv.invoice?.contactNo || "N/A", startX + 390, y, 160, rowH);
+        drawCell("Customer Name", startX, y, 120, rowH, "left", true);
+        drawCell(inv.invoice?.customerName || "N/A", startX + 120, y, 120, rowH);
+        drawCell("Contact #", startX + 240, y, 120, rowH, "left", true);
+        drawCell(inv.invoice?.contactNo || "N/A", startX + 360, y, 160, rowH);
         y += rowH;
 
-        drawCell("Vehicle Reg", startX, y, 130, rowH, "left", true);
-        drawCell(inv.booking?.vehicleRegNo || "N/A", startX + 130, y, 130, rowH);
-        drawCell("Make & Model", startX + 260, y, 130, rowH, "left", true);
-        drawCell(inv.booking?.makeModel || "N/A", startX + 390, y, 160, rowH);
+        drawCell("Vehicle Reg", startX, y, 120, rowH, "left", true);
+        drawCell(inv.booking?.vehicleRegNo || "N/A", startX + 120, y, 120, rowH);
+        drawCell("Make & Model", startX + 240, y, 120, rowH, "left", true);
+        drawCell(inv.booking?.makeModel || "N/A", startX + 360, y, 160, rowH);
         y += rowH;
 
-        drawCell("Postal Code", startX, y, 130, rowH, "left", true);
-        drawCell(inv.invoice?.postalCode || "N/A", startX + 130, y, 130, rowH);
-        y += rowH + 30;
+        drawCell("Postal Code", startX, y, 120, rowH, "left", true);
+        drawCell(inv.invoice?.postalCode || "N/A", startX + 120, y, 120, rowH);
+        y += rowH + 25;
 
-        // ------------------ SUMMARY TABLE HEADER ------------------
-        drawCell("Description", startX, y, 225, rowH, true, "left", true);
-        drawCell("Type", startX + 225, y, 75, rowH, true, "center", true);
-        drawCell("Amount (+/-)", startX + 300, y, 100, rowH, true, "right", true);
-        drawCell("VAT (20%)", startX + 400, y, 75, rowH, true, "right", true);
-        drawCell("Revenue / Expense", startX + 475, y, 75, rowH, true, "right", true);
+        // --- MAIN TABLE HEADER (adjusted for better spacing) ---
+        rowH += 10; // increase header row height
+        drawCell("#", startX, y, 20, rowH, "center", true, true);
+        drawCell("Description", startX + 20, y, 185, rowH, "left", true, true);
+        drawCell("Type", startX + 205, y, 70, rowH, "center", true, true);
+        drawCell("Amount (+/-)", startX + 275, y, 85, rowH, "right", true, true);
+        drawCell("VAT (20%)", startX + 360, y, 70, rowH, "right", true, true);
+        drawCell("Revenue / Expense", startX + 430, y, 90, rowH, "right", true, true);
         y += rowH;
 
         // ------------------ ITEMS ------------------
@@ -383,74 +384,76 @@ export const viewInternalInvoicePdf = async (req, res) => {
             )
         );
 
-        let totalVat = 0;
+        let vatOnRevenue = 0;
+        let vatOnCost = 0;
         let totalRevenue = 0;
         let totalProfit = 0;
 
-        const addRow = (i) => {
+        items.forEach((i, index) => {
             const isRevenue = i.revenue > 0;
             const base = isRevenue ? i.revenue : -i.cost;
             const vat = Math.abs(base * 0.2);
             const profit = i.revenue - i.cost;
 
-            totalVat += vat;
+            if (isRevenue) vatOnRevenue += vat;
+            else vatOnCost += vat;
+
             totalRevenue += isRevenue ? base : 0;
             totalProfit += profit;
 
-            // Page break if nearing bottom
-            if (y > 720) {
-                doc.addPage();
-                y = 50;
-                drawCell("Description", startX, y, 225, rowH, true, "left", true);
-                drawCell("Type", startX + 225, y, 75, rowH, true, "center", true);
-                drawCell("Amount (+/-)", startX + 300, y, 100, rowH, true, "right", true);
-                drawCell("VAT (20%)", startX + 400, y, 75, rowH, true, "right", true);
-                drawCell("Revenue / Expense", startX + 475, y, 75, rowH, true, "right", true);
-                y += rowH;
-            }
+            drawCell(String(index + 1), startX, y, 20, rowH, "center");
+            drawCell(i.desc, startX + 20, y, 185, rowH);
+            drawCell(i.type, startX + 205, y, 70, rowH, false, "center");
+            drawCell(`${isRevenue ? "+" : "-"}£${Math.abs(base).toFixed(2)}`, startX + 275, y, 85, rowH, false, "right");
+            drawCell(`£${vat.toFixed(2)}`, startX + 360, y, 70, rowH, false, "right");
 
-            drawCell(i.desc, startX, y, 225, rowH);
-            drawCell(i.type, startX + 225, y, 75, rowH, false, "center");
-            drawCell(`${isRevenue ? "+" : "-"}£${Math.abs(base).toFixed(2)}`, startX + 300, y, 100, rowH, false, "right");
-            drawCell(`£${vat.toFixed(2)}`, startX + 400, y, 75, rowH, false, "right");
-
-            // Profit color coded
             doc.fillColor(profit >= 0 ? "#007200" : "#B22222");
-            drawCell(`£${profit.toFixed(2)}`, startX + 475, y, 75, rowH, false, "right");
+            drawCell(`£${profit.toFixed(2)}`, startX + 430, y, 90, rowH, false, "right");
             doc.fillColor("#000");
+
+            y += rowH;
+        });
+
+        const netVat = vatOnRevenue - vatOnCost;
+
+        // ------------------ TOTALS ------------------
+        y += 75;
+        const totalBoxX = startX + 160;
+        const totalBoxW = 360;
+
+        const drawTotalRow = (label, value, shaded = false) => {
+            if (shaded) doc.rect(totalBoxX, y, totalBoxW, rowH).fillAndStroke("#f0f0f0", "black");
+            doc.fillColor("#000").font("Helvetica-Bold").fontSize(10);
+            doc.text(label, totalBoxX + 10, y + 6, { width: 180, align: "right" });
+            doc.text(`£${value.toFixed(2)}`, totalBoxX + 190, y + 6, { width: 150, align: "right" });
+            doc.rect(totalBoxX, y, totalBoxW, rowH).stroke();
             y += rowH;
         };
 
-        items.forEach(addRow);
-
-        // ------------------ TOTALS SECTION ------------------
-        y += 25;
-        const totalBoxX = startX + 220;
-
-        const drawTotalRow = (label, value, isBold = false, shaded = false) => {
-            if (shaded) doc.rect(totalBoxX, y, 330, rowH).fillAndStroke("#f5f5f5", "black");
-            doc.fillColor("#000");
-            doc.font(isBold ? "Helvetica-Bold" : "Helvetica").fontSize(10);
-            doc.text(label, totalBoxX + 5, y + 6, { width: 160, align: "right" });
-            doc.text(`£${value.toFixed(2)}`, totalBoxX + 165, y + 6, { width: 160, align: "right" });
-            doc.rect(totalBoxX, y, 330, rowH).stroke();
-            y += rowH;
-        };
-
-        drawTotalRow("Total Revenue", totalRevenue, true, true);
-        drawTotalRow("Total VAT (20%)", totalVat, true);
-        drawTotalRow("Net Profit", totalProfit, true, true);
+        drawTotalRow("Total Revenue", totalRevenue, true);
+        drawTotalRow("Net VAT (20%)", netVat, false);
+        drawTotalRow("Net Profit", totalProfit, true);
 
         // ------------------ FOOTER ------------------
-        doc.moveTo(40, y + 15).lineTo(550, y + 15).stroke();
-        doc.moveDown(1.5);
-        doc.fontSize(8).fillColor("#555")
+        const footerY = doc.page.height - 50;
+
+        // 🔹 Draw a line above footer
+        doc.moveTo(40, footerY - 10)  // start X=40, slightly above footer
+            .lineTo(doc.page.width - 40, footerY - 10) // end X across page
+            .strokeColor("#999") // soft grey line
+            .lineWidth(0.5)
+            .stroke();
+
+        // 🔹 Footer Text
+        doc.fontSize(8)
+            .fillColor("#555")
             .text(
                 `Generated on: ${new Date().toLocaleDateString("en-GB")}  |  Confidential Internal Report`,
-                { align: "center" }
+                40,
+                footerY,
+                { align: "center", width: doc.page.width - 80 } // keep balanced margins
             );
 
-        // End PDF
         doc.end();
 
     } catch (err) {
