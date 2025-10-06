@@ -274,7 +274,7 @@ export const getInternalInvoiceById = async (req, res) => {
 };
 
 // ==========================
-// 🧾 View Internal Invoice PDF Inline (with Net VAT)
+// 🧾 View Internal Invoice PDF Inline (with Net VAT + Watermark)
 // ==========================
 import PDFDocument from "pdfkit";
 import path from "path";
@@ -304,6 +304,25 @@ export const viewInternalInvoicePdf = async (req, res) => {
 
         const doc = new PDFDocument({ margin: 40, size: "A4" });
         doc.pipe(res);
+
+        // ------------------ 🔒 CONFIDENTIAL WATERMARK ------------------
+        const watermark = (page) => {
+            const { width, height } = page;
+            doc.save();
+            doc.font("Helvetica-Bold")
+                .fontSize(80)
+                .fillColor("lightgrey")
+                .rotate(-45, { origin: [width / 2, height / 2] })
+                .opacity(0.50)
+                .text("CONFIDENTIAL", width / 4, height / 2, {
+                    align: "center",
+                    width: width / 2,
+                });
+            doc.opacity(1).restore(); // reset opacity and rotation
+        };
+
+        // Add watermark to first page
+        watermark(doc.page);
 
         // ------------------ HEADER ------------------
         const logoPath = path.join(__dirname, "../public/logo.png");
@@ -358,14 +377,14 @@ export const viewInternalInvoicePdf = async (req, res) => {
         drawCell(inv.invoice?.postalCode || "N/A", startX + 120, y, 120, rowH);
         y += rowH + 25;
 
-        // --- MAIN TABLE HEADER (adjusted for better spacing) ---
-        rowH += 10; // increase header row height
-        drawCell("#", startX, y, 20, rowH, "center", true, true);
-        drawCell("Description", startX + 20, y, 185, rowH, "left", true, true);
-        drawCell("Type", startX + 205, y, 70, rowH, "center", true, true);
-        drawCell("Amount (+/-)", startX + 275, y, 85, rowH, "right", true, true);
-        drawCell("VAT (20%)", startX + 360, y, 70, rowH, "right", true, true);
-        drawCell("Revenue / Expense", startX + 430, y, 90, rowH, "right", true, true);
+        // --- MAIN TABLE HEADER (adjusted spacing) ---
+        rowH += 10;
+        drawCell("#", startX, y, 25, rowH, "center", true, true);
+        drawCell("Description", startX + 25, y, 175, rowH, "left", true, true);
+        drawCell("Type", startX + 200, y, 70, rowH, "center", true, true);
+        drawCell("Amount (+/-)", startX + 270, y, 90, rowH, "right", true, true);
+        drawCell("VAT (20%)", startX + 360, y, 80, rowH, "right", true, true);
+        drawCell("Revenue / Expense", startX + 440, y, 100, rowH, "right", true, true);
         y += rowH;
 
         // ------------------ ITEMS ------------------
@@ -401,14 +420,14 @@ export const viewInternalInvoicePdf = async (req, res) => {
             totalRevenue += isRevenue ? base : 0;
             totalProfit += profit;
 
-            drawCell(String(index + 1), startX, y, 20, rowH, "center");
-            drawCell(i.desc, startX + 20, y, 185, rowH);
-            drawCell(i.type, startX + 205, y, 70, rowH, false, "center");
-            drawCell(`${isRevenue ? "+" : "-"}£${Math.abs(base).toFixed(2)}`, startX + 275, y, 85, rowH, false, "right");
-            drawCell(`£${vat.toFixed(2)}`, startX + 360, y, 70, rowH, false, "right");
+            drawCell(String(index + 1), startX, y, 25, rowH, "center");
+            drawCell(i.desc, startX + 25, y, 175, rowH);
+            drawCell(i.type, startX + 200, y, 70, rowH, false, "center");
+            drawCell(`${isRevenue ? "+" : "-"}£${Math.abs(base).toFixed(2)}`, startX + 270, y, 90, rowH, false, "right");
+            drawCell(`£${vat.toFixed(2)}`, startX + 360, y, 80, rowH, false, "right");
 
             doc.fillColor(profit >= 0 ? "#007200" : "#B22222");
-            drawCell(`£${profit.toFixed(2)}`, startX + 430, y, 90, rowH, false, "right");
+            drawCell(`£${profit.toFixed(2)}`, startX + 440, y, 100, rowH, false, "right");
             doc.fillColor("#000");
 
             y += rowH;
@@ -437,10 +456,10 @@ export const viewInternalInvoicePdf = async (req, res) => {
         // ------------------ FOOTER ------------------
         const footerY = doc.page.height - 50;
 
-        // 🔹 Draw a line above footer
-        doc.moveTo(40, footerY - 10)  // start X=40, slightly above footer
-            .lineTo(doc.page.width - 40, footerY - 10) // end X across page
-            .strokeColor("#999") // soft grey line
+        // 🔹 Line above footer
+        doc.moveTo(40, footerY - 10)
+            .lineTo(doc.page.width - 40, footerY - 10)
+            .strokeColor("#999")
             .lineWidth(0.5)
             .stroke();
 
@@ -451,7 +470,7 @@ export const viewInternalInvoicePdf = async (req, res) => {
                 `Generated on: ${new Date().toLocaleDateString("en-GB")}  |  Confidential Internal Report`,
                 40,
                 footerY,
-                { align: "center", width: doc.page.width - 80 } // keep balanced margins
+                { align: "center", width: doc.page.width - 80 }
             );
 
         doc.end();
