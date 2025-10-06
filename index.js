@@ -24,8 +24,8 @@ const app = express();
 const corsOptions = {
     origin: [
         'http://localhost:3000',
-        'http://192.168.18.84:3000', // for frontend running on another PC
-        'http://192.168.18.84'       // for built Electron app
+        'http://192.168.18.89:3000', // for frontend running on another PC
+        'http://192.168.18.89'       // for built Electron app
     ],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -97,7 +97,7 @@ mongoose
     .then(() => {
         console.log('✅ MongoDB connected to gms_db');
         app.listen(PORT, "0.0.0.0", () => {
-            console.log(`🚀 API running at http://192.168.18.84:${PORT}`);
+            console.log(`🚀 API running at http://192.168.18.89:${PORT}`);
         });
 
     })
