@@ -1,36 +1,68 @@
 // src/routes/internalInvoiceRoutes.js
 import express from "express";
+import { requireAuth, requireRole } from "../middleware/auth.js";
+import { validateWithZod } from "../middleware/zodMiddleware.js";
+import {
+    createInternalInvoiceSchema,
+    listInternalInvoicesQuerySchema,
+    internalInvoiceIdParamSchema,
+} from "../validators/internalInvoice.js";
 import {
     createInternalInvoice,
     getInternalInvoices,
     getInternalInvoiceById,
-} from "../controllers/internalinvoice.js"; // ✅ make sure filename matches
+    viewInternalInvoicePdf,
+} from "../controllers/internalInvoice/index.js";
 
 const router = express.Router();
 
 /**
  * @route POST /api/internal-invoices
  * @desc Create a new internal invoice
- * Only invoiceId is required in the body; purchaseInvoiceId is auto-resolved by booking
+ * @access Private (Admin / Accountant)
  */
-router.post("/", createInternalInvoice);
+router.post(
+    "/",
+    requireAuth,
+    validateWithZod(createInternalInvoiceSchema),
+    createInternalInvoice
+);
 
 /**
  * @route GET /api/internal-invoices
  * @desc Get all internal invoices (with pagination & filters)
+ * @access Private
  */
-router.get("/", getInternalInvoices);
+router.get(
+    "/",
+    requireAuth,
+    requireRole("admin", "accountant", "manager"),
+    validateWithZod(listInternalInvoicesQuerySchema, "query"),
+    getInternalInvoices
+);
 
 /**
  * @route GET /api/internal-invoices/:id
  * @desc Get single internal invoice by ID
+ * @access Private
  */
-router.get("/:id", getInternalInvoiceById);
+router.get(
+    "/:id",
+    requireAuth,
+    requireRole("admin", "accountant", "manager"),
+    validateWithZod(internalInvoiceIdParamSchema, "params"),
+    getInternalInvoiceById
+);
 
-// ✅ Inline PDF view for Internal Invoice
-router.get("/:id/pdf/view", async (req, res, next) => {
-    const { viewInternalInvoicePdf } = await import("../controllers/internalinvoice.js");
-    return viewInternalInvoicePdf(req, res, next);
-});
+/**
+ * @route GET /api/internal-invoices/:id/pdf/view
+ * @desc Generate & View PDF (Profit/Loss format)
+ * @access Private
+ */
+router.get(
+    "/:id/pdf/view",
+    validateWithZod(internalInvoiceIdParamSchema, "params"),
+    viewInternalInvoicePdf
+);
 
 export default router;

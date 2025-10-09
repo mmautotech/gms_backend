@@ -1,8 +1,8 @@
 import express from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { validateWithZod } from "../middleware/zodMiddleware.js";
-import * as invoiceController from "../controllers/invoiceController.js";
 import * as invoiceValidators from "../validators/invoice.js";
+import * as invoiceController from "../controllers/invoice/index.js";
 
 const router = express.Router();
 

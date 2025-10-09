@@ -1,8 +1,8 @@
-// models/Invoice.js
 import mongoose from "mongoose";
 
 const { ObjectId } = mongoose.Schema.Types;
 
+// Common numeric options
 const moneyOpts = { type: Number, min: 0, default: 0 };
 
 // --- Invoice Item Schema ---
@@ -17,39 +17,50 @@ const invoiceItemSchema = new mongoose.Schema(
 // --- Invoice Schema ---
 const InvoiceSchema = new mongoose.Schema(
   {
-    invoiceNo: { type: String, required: true, unique: true }, // e.g. "INV-20250910-001"
-    booking: { type: ObjectId, ref: "Booking", required: true },
+    // 🔹 Unique invoice number for human readability
+    invoiceNo: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+      uppercase: true,
+    },
 
-    // Customer snapshot (denormalized from Booking)
-    customerName: { type: String, required: true },
-    contactNo: { type: String, required: true },
-    postalCode: { type: String, required: true },
-    vehicleRegNo: { type: String, required: true },
-    makeModel: { type: String, required: true },
+    // 🔹 Booking reference
+    booking: { type: ObjectId, ref: "Booking", required: true, index: true },
 
+    // 🔹 Customer snapshot (denormalized for reporting)
+    customerName: { type: String, required: true, trim: true },
+    contactNo: { type: String, required: true, trim: true },
+    postalCode: { type: String, required: true, trim: true },
+    vehicleRegNo: { type: String, required: true, trim: true, uppercase: true },
+    makeModel: { type: String, required: true, trim: true },
+
+    // 🔹 Invoice issue date
     invoiceDate: { type: Date, default: Date.now },
 
-    // Line items (services, upsells, parts, etc.)
+    // 🔹 Line items (services, upsells, parts, etc.)
     items: { type: [invoiceItemSchema], default: [] },
 
-    // Totals
+    // 🔹 Totals
     totalAmount: { ...moneyOpts, required: true },
 
-    // ✅ Financial fields
+    // 🔹 Financial modifiers
     discountAmount: { type: Number, min: 0, default: 0 },
     vatIncluded: { type: Boolean, default: false },
+
+    // 🔹 Payment status
     status: {
       type: String,
       enum: ["Unpaid", "Partial", "Paid"],
       default: "Unpaid",
     },
 
-    createdBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-    },
+    // 🔹 User who created the invoice
+    createdBy: { type: ObjectId, ref: "User" },
 
-    notes: { type: String, default: "" },
+    // 🔹 Optional notes
+    notes: { type: String, trim: true, default: "" },
   },
   {
     timestamps: true,
@@ -65,6 +76,11 @@ const InvoiceSchema = new mongoose.Schema(
     toObject: { virtuals: true, versionKey: false },
   }
 );
+
+// --- Indexes for performance ---
+InvoiceSchema.index({ invoiceNo: 1 });
+InvoiceSchema.index({ booking: 1 });
+InvoiceSchema.index({ customerName: "text", invoiceNo: "text" });
 
 const Invoice = mongoose.model("Invoice", InvoiceSchema);
 export default Invoice;
