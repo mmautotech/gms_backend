@@ -69,7 +69,6 @@ router.get(
  */
 router.get(
     "/:id/pdf/view",
-    requireAuth,
     validateWithZod(internalInvoiceIdParamSchema, "params"),
     viewInternalInvoicePdf
 );

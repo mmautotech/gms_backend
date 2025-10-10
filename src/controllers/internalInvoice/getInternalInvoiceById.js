@@ -24,7 +24,7 @@ export const getInternalInvoiceById = async (req, res) => {
             .populate({
                 path: "purchaseInvoices",
                 populate: [
-                    { path: "createdBy", select: "username" },
+                    { path: "purchaser", select: "username" },
                     { path: "supplier", select: "name contact" },
                     { path: "items.part", select: "partName" },
                 ],

@@ -9,15 +9,13 @@ const __dirname = path.dirname(__filename);
 
 /**
  * ✅ Internal Invoice (Profit & Loss Style)
- * Opens inline in browser — same layout, with safe no-purchase handling.
+ * Opens inline in browser — with vendorInvoiceNumber and left-aligned section titles.
  */
 export const viewInternalInvoicePdf = async (req, res) => {
     try {
         const { id } = req.params;
 
-        // -----------------------------
         // 🔍 Fetch Internal Invoice
-        // -----------------------------
         const inv = await InternalInvoice.findById(id)
             .populate({
                 path: "invoice",
@@ -36,9 +34,7 @@ export const viewInternalInvoicePdf = async (req, res) => {
         if (!inv)
             return res.status(404).json({ message: "Internal invoice not found" });
 
-        // -----------------------------
-        // 🧾 PDF Setup (Inline view)
-        // -----------------------------
+        // 🧾 PDF Setup
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader(
             "Content-Disposition",
@@ -48,11 +44,8 @@ export const viewInternalInvoicePdf = async (req, res) => {
         const doc = new PDFDocument({ margin: 40, size: "A4" });
         doc.pipe(res);
 
-        // -----------------------------
         // 📌 Helpers
-        // -----------------------------
-        const fmtDate = (d) =>
-            d ? new Date(d).toLocaleDateString("en-GB") : "N/A";
+        const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("en-GB") : "N/A");
         const round2 = (v) => Number((v || 0).toFixed(2));
         const fmtVal = (v) =>
             v == null || isNaN(v)
@@ -62,6 +55,7 @@ export const viewInternalInvoicePdf = async (req, res) => {
                     : v < 0
                         ? `(${Math.abs(v).toFixed(2)})`
                         : v.toFixed(2);
+
         const addLine = (
             label,
             value = "",
@@ -85,10 +79,8 @@ export const viewInternalInvoicePdf = async (req, res) => {
             doc.fillColor("#000");
         };
 
-        // -----------------------------
         // 🧩 Header
-        // -----------------------------
-        const logoPath = path.join(process.cwd(), "public", "logo.png");
+        const logoPath = path.join(__dirname, "../../public/logo.png");
         try {
             doc.image(logoPath, 50, 35, { width: 60 });
         } catch {
@@ -109,7 +101,7 @@ export const viewInternalInvoicePdf = async (req, res) => {
         doc.moveDown(1.5);
         const startY = doc.y;
 
-        // Left block: Booking Info
+        // Booking Info
         doc.font("Helvetica-Bold").text("Booking Information", 60, startY);
         doc.font("Helvetica").fontSize(9);
         doc.text(
@@ -120,7 +112,7 @@ export const viewInternalInvoicePdf = async (req, res) => {
         doc.text(`Booking Date: ${fmtDate(inv.booking?.createdAt)}`);
         doc.text(`Generated On: ${fmtDate(new Date())}`);
 
-        // Right block: Customer Info
+        // Customer Info
         const rightX = 320;
         doc.font("Helvetica-Bold").text("Customer Information", rightX, startY);
         doc.font("Helvetica").fontSize(9);
@@ -135,14 +127,12 @@ export const viewInternalInvoicePdf = async (req, res) => {
         doc.moveTo(50, doc.y).lineTo(550, doc.y).strokeColor("#555").stroke();
         doc.moveDown(0.8);
 
-        // -----------------------------
-        // 💰 Income Section (Sales)
-        // -----------------------------
+        // 💰 INCOME (Sales)
         doc
             .font("Helvetica-Bold")
             .fontSize(11)
             .fillColor("#004AAD")
-            .text("INCOME (Sales)");
+            .text("INCOME (Sales)", 60);
         doc.moveDown(0.5);
 
         const items = inv.invoice?.items || [];
@@ -171,18 +161,17 @@ export const viewInternalInvoicePdf = async (req, res) => {
         addLine("VAT (20%)", fmtVal(totalVat), false, "#666", true);
         addLine("Less: Discount", discount === 0 ? "–" : fmtVal(-discount));
         totalRevenue -= discount;
+        totalRevenue += totalVat
         addLine("----------------------------------------", "", false);
-        addLine("Total Revenue", `£${fmtVal(totalRevenue + totalVat)}`, true);
+        addLine("Total Revenue", `£${fmtVal(totalRevenue)}`, true);
         doc.moveDown(1);
 
-        // -----------------------------
-        // 💸 Expense Section (Purchases)
-        // -----------------------------
+        // 💸 EXPENSES (Purchases)
         doc
             .font("Helvetica-Bold")
             .fontSize(11)
             .fillColor("#004AAD")
-            .text("EXPENSES (Purchases)");
+            .text("EXPENSES (Purchases)", 60);
         doc.moveDown(0.5);
 
         const purchases = inv.purchaseInvoices || [];
@@ -200,13 +189,17 @@ export const viewInternalInvoicePdf = async (req, res) => {
                 doc
                     .font("Helvetica-Bold")
                     .fillColor("#000")
-                    .text(`Supplier: ${pi.supplier?.name || "N/A"}`);
+                    .text(
+                        `Supplier: ${pi.supplier?.name || "N/A"} | Invoice #: ${pi.vendorInvoiceNumber || "N/A"
+                        }`,
+                        60
+                    );
                 if (pi.supplier?.contact)
                     doc
                         .font("Helvetica")
                         .fontSize(8)
                         .fillColor("#555")
-                        .text(`Contact: ${pi.supplier.contact}`);
+                        .text(`Contact: ${pi.supplier.contact}`, 60);
                 doc.moveDown(0.3);
 
                 let purchaseSubtotal = 0;
@@ -215,29 +208,24 @@ export const viewInternalInvoicePdf = async (req, res) => {
                 pi.items?.forEach((p) => {
                     const base = round2((p.rate || 0) * (p.quantity || 1));
                     const vat = pi.vatIncluded ? round2(base * 0.2) : 0;
-                    addLine(
-                        `   • ${p.part?.partName || "N/A"} × ${p.quantity}`,
-                        fmtVal(-base)
-                    );
+                    addLine(`   • ${p.part?.partName || "N/A"} × ${p.quantity}`, fmtVal(-base));
                     purchaseSubtotal += base;
                     purchaseVat += vat;
                 });
 
                 addLine("   VAT (20%)", fmtVal(-purchaseVat), false, "#666", true);
                 const disc = round2(pi.discount || 0);
-                addLine(
-                    "   Less: Purchase Discount",
-                    disc === 0 ? "–" : fmtVal(-disc)
-                );
+                addLine("   Less: Purchase Discount", disc === 0 ? "–" : fmtVal(-disc));
 
                 purchaseSubtotal -= disc;
                 totalExpenses += purchaseSubtotal + purchaseVat;
                 totalPurchaseVat += purchaseVat;
+                purchaseSubtotal += purchaseVat
 
                 addLine("----------------------------------------", "", false);
                 addLine(
                     `Total Purchase - ${pi.supplier?.name || "N/A"}`,
-                    `£${fmtVal(-(purchaseSubtotal + purchaseVat))}`,
+                    `£${fmtVal(-(purchaseSubtotal))}`,
                     true
                 );
                 if (index < purchases.length - 1) doc.moveDown(0.8);
@@ -247,18 +235,16 @@ export const viewInternalInvoicePdf = async (req, res) => {
         addLine("Total Expenses", `£${fmtVal(-totalExpenses)}`, true);
         doc.moveDown(1);
 
-        // -----------------------------
-        // 📊 Summary Section
-        // -----------------------------
+        // 📊 SUMMARY
         const grossProfit = totalRevenue - totalExpenses;
         const netVat = totalVat - totalPurchaseVat;
-        const netProfit = grossProfit + netVat;
+        const netProfit = grossProfit - netVat;
 
         doc
             .font("Helvetica-Bold")
             .fontSize(11)
             .fillColor("#004AAD")
-            .text("SUMMARY");
+            .text("SUMMARY", 60);
         doc.moveDown(0.5);
         addLine(
             "Gross Profit",
@@ -275,9 +261,7 @@ export const viewInternalInvoicePdf = async (req, res) => {
             netProfit < 0 ? "#B22222" : "#007200"
         );
 
-        // -----------------------------
-        // 💧 Watermark (for non-prod)
-        // -----------------------------
+        // 💧 Watermark
         if (process.env.NODE_ENV !== "production") {
             doc
                 .fontSize(40)
@@ -287,18 +271,14 @@ export const viewInternalInvoicePdf = async (req, res) => {
             doc.rotate(45);
         }
 
-        // -----------------------------
         // 📄 Footer
-        // -----------------------------
         doc.moveDown(2);
         doc.moveTo(50, doc.y).lineTo(550, doc.y).strokeColor("#999").stroke();
         doc
             .fontSize(8)
             .fillColor("#555")
             .text(
-                `Generated on: ${fmtDate(
-                    new Date()
-                )} | Confidential Internal Statement`,
+                `Generated on: ${fmtDate(new Date())} | Confidential Internal Statement`,
                 0,
                 doc.y + 4,
                 { align: "center" }
