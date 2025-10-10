@@ -12,8 +12,12 @@ const router = express.Router();
  * ---------------------------
  */
 
-// 🔓 Direct inline PDF view (customer/proforma invoices)
-router.get("/:invoiceId/pdf/view", invoiceController.viewInvoicePdf);
+// 🔓 Inline PDF view (customer/proforma invoices)
+router.get(
+    "/:invoiceId/pdf/view",
+    validateWithZod(invoiceValidators.getInvoiceByIdParamSchema, "params"),
+    invoiceController.viewInvoicePdf
+);
 
 /**
  * ---------------------------
@@ -22,31 +26,29 @@ router.get("/:invoiceId/pdf/view", invoiceController.viewInvoicePdf);
  */
 router.use(requireAuth);
 
-// ✅ Invoice statistics
-router.get("/stats", invoiceController.getInvoiceStats);
 
-// ✅ List invoices
+// 📋 List invoices
 router.get(
     "/",
     validateWithZod(invoiceValidators.listInvoicesQuerySchema, "query"),
     invoiceController.getAllInvoices
 );
 
-// ✅ Get invoice by booking (fetch only, auto-generate if missing inside controller)
+// 📄 Get invoice by booking (fetch existing only)
 router.get(
     "/booking/:bookingId",
     validateWithZod(invoiceValidators.getInvoiceByBookingParamSchema, "params"),
     invoiceController.getInvoiceByBookingId
 );
 
-// ✅ Generate (or regenerate) invoice for booking
+// 🧾 Generate / Regenerate invoice for booking
 router.post(
     "/booking/:bookingId/generate",
     validateWithZod(invoiceValidators.getInvoiceByBookingParamSchema, "params"),
     invoiceController.generateInvoiceByBookingId
 );
 
-// ✅ Update invoice
+// ✏️ Update invoice
 router.put(
     "/:invoiceId",
     validateWithZod(invoiceValidators.getInvoiceByIdParamSchema, "params"),

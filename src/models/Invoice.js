@@ -1,3 +1,4 @@
+// models/Invoice.js
 import mongoose from "mongoose";
 
 const { ObjectId } = mongoose.Schema.Types;
@@ -36,8 +37,8 @@ const InvoiceSchema = new mongoose.Schema(
     vehicleRegNo: { type: String, required: true, trim: true, uppercase: true },
     makeModel: { type: String, required: true, trim: true },
 
-    // 🔹 Invoice issue date
-    invoiceDate: { type: Date, default: Date.now },
+    // 🔹 Landing date snapshot (from Booking.arrivedAt)
+    landingDate: { type: Date, default: null },
 
     // 🔹 Line items (services, upsells, parts, etc.)
     items: { type: [invoiceItemSchema], default: [] },
@@ -49,21 +50,19 @@ const InvoiceSchema = new mongoose.Schema(
     discountAmount: { type: Number, min: 0, default: 0 },
     vatIncluded: { type: Boolean, default: false },
 
-    // 🔹 Payment status
+    // 🔹 Payment status (customer-oriented)
     status: {
       type: String,
-      enum: ["Unpaid", "Partial", "Paid"],
-      default: "Unpaid",
+      enum: ["Received", "Receivable", "Partial"],
+      default: "Receivable",
+      index: true,
     },
 
     // 🔹 User who created the invoice
     createdBy: { type: ObjectId, ref: "User" },
-
-    // 🔹 Optional notes
-    notes: { type: String, trim: true, default: "" },
   },
   {
-    timestamps: true,
+    timestamps: true, // adds createdAt and updatedAt
     toJSON: {
       virtuals: true,
       versionKey: false,
@@ -80,7 +79,29 @@ const InvoiceSchema = new mongoose.Schema(
 // --- Indexes for performance ---
 InvoiceSchema.index({ invoiceNo: 1 });
 InvoiceSchema.index({ booking: 1 });
+InvoiceSchema.index({ landingDate: -1 });
 InvoiceSchema.index({ customerName: "text", invoiceNo: "text" });
+
+// --- Pre-save hook to auto-map landingDate from Booking ---
+InvoiceSchema.pre("save", async function (next) {
+  if (this.isNew && this.booking && !this.landingDate) {
+    try {
+      const Booking = mongoose.model("Booking");
+      const bookingDoc = await Booking.findById(this.booking)
+        .select("arrivedAt scheduledDate createdAt")
+        .lean();
+      if (bookingDoc) {
+        this.landingDate =
+          bookingDoc.arrivedAt ||
+          bookingDoc.scheduledDate ||
+          bookingDoc.createdAt;
+      }
+    } catch (err) {
+      console.warn("⚠️ Could not map landingDate from Booking:", err.message);
+    }
+  }
+  next();
+});
 
 const Invoice = mongoose.model("Invoice", InvoiceSchema);
 export default Invoice;

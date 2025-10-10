@@ -1,7 +1,7 @@
-// controllers/dashboardController.js
 import Invoice from "../models/Invoice.js";
 import Booking from "../models/Booking.js";
 import Service from "../models/Service.js";
+
 
 // GET /admin/dashboard/stats
 export const getDashboardStats = async (req, res) => {
@@ -11,9 +11,11 @@ export const getDashboardStats = async (req, res) => {
          -------------------------------- */
         const revenue = {};
 
+
         const today = new Date();
         const past30 = new Date();
         past30.setDate(today.getDate() - 29); // last 30 days
+
 
         // Daily Revenue (last 30 days)
         revenue.daily = await Invoice.aggregate([
@@ -32,9 +34,11 @@ export const getDashboardStats = async (req, res) => {
             { $sort: { "_id": 1 } },
         ]);
 
+
         // Weekly Revenue (last 12 weeks)
         const past12Weeks = new Date();
         past12Weeks.setDate(today.getDate() - 7 * 11); // last 12 weeks
+
 
         revenue.weekly = await Invoice.aggregate([
             {
@@ -55,7 +59,8 @@ export const getDashboardStats = async (req, res) => {
             { $sort: { "_id.year": 1, "_id.isoWeek": 1 } },
         ]);
 
-        // Monthly Revenue
+
+        // Monthly Revenue (for all months)
         const revenueData = await Invoice.aggregate([
             { $match: { totalAmount: { $gt: 0 } } },
             {
@@ -72,6 +77,7 @@ export const getDashboardStats = async (req, res) => {
         });
         revenue.monthly = monthlyRevenue;
 
+
         // Yearly Revenue
         revenue.yearly = await Invoice.aggregate([
             { $match: { totalAmount: { $gt: 0 } } },
@@ -84,8 +90,9 @@ export const getDashboardStats = async (req, res) => {
             { $sort: { "_id": 1 } },
         ]);
 
+
         /** -------------------------------
-         * Service Trends by Interval (FIXED)
+         * Service Trends by Interval
          -------------------------------- */
         const serviceTrends = {};
         const intervals = [
@@ -95,17 +102,16 @@ export const getDashboardStats = async (req, res) => {
             { name: "yearly", start: null, format: "%Y" },
         ];
 
-        for (const interval of intervals) {
-            // Match bookings that have prebookingServices
-            const matchStage = { prebookingServices: { $ne: null } };
 
-            // Daily/weekly filtering using bookingDate OR fallback to createdAt
+        for (const interval of intervals) {
+            const matchStage = { prebookingServices: { $ne: null } };
             if (interval.start) {
                 matchStage.$or = [
                     { bookingDate: { $gte: interval.start, $lte: today } },
                     { bookingDate: null, createdAt: { $gte: interval.start, $lte: today } },
                 ];
             }
+
 
             const data = await Booking.aggregate([
                 { $unwind: "$prebookingServices" },
@@ -143,31 +149,51 @@ export const getDashboardStats = async (req, res) => {
                 { $sort: { period: 1, count: -1 } },
             ]);
 
+
             serviceTrends[interval.name] = data;
         }
 
+
         /** -------------------------------
-         * Booking Stats
+         * Booking Stats (Fixed)
          -------------------------------- */
         const bookingStatusData = await Booking.aggregate([
             { $group: { _id: "$status", count: { $sum: 1 } } },
         ]);
 
+
+        const allStatuses = ["pending", "arrived", "completed", "cancelled"];
         const bookings = { total: await Booking.countDocuments() };
+
+
+        // initialize all statuses with 0
+        for (const status of allStatuses) {
+            bookings[status] = 0;
+        }
+
+
         bookingStatusData.forEach((b) => {
-            bookings[b._id] = b.count;
+            const key = (b._id || "").toLowerCase();
+            bookings[key] = b.count;
         });
+
 
         /** -------------------------------
          * Response
          -------------------------------- */
         res.json({
+            success: true,
+            message: "Dashboard stats fetched successfully",
             revenue,
             serviceTrends,
             bookings,
         });
     } catch (err) {
         console.error("Dashboard Stats Error:", err);
-        res.status(500).json({ message: "Server error" });
+        res.status(500).json({
+            success: false,
+            message: "Server error while fetching dashboard stats",
+            error: err.message,
+        });
     }
 };

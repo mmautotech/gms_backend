@@ -8,8 +8,6 @@ export { getInvoiceByBookingId } from "./getInvoiceByBookingId.js";
 export { getAllInvoices } from "./getAllInvoices.js";
 export { updateInvoice } from "./updateInvoice.js";
 
-// 📊 Stats & Reporting
-export { getInvoiceStats } from "./getInvoiceStats.js";
 
 // 🧾 PDF Viewer / Export
 export { viewInvoicePdf } from "./viewInvoicePdf.js";
