@@ -1,11 +1,13 @@
-// controllers/invoices/getAllInvoices.js
 import Invoice from "../../models/Invoice.js";
 
 /**
  * 🧾 Get All Invoices (with filters, pagination, totals, and metadata)
- * - Supports text search, status filtering, and date range by landingDate
- * - Returns unified structure with pagination + totals + applied filters
- * - Populates createdBy.username
+ * Supports:
+ * - Text search (invoiceNo, customerName, contactNo, postalCode, vehicleRegNo, makeModel)
+ * - Status filter
+ * - Date range filter (createdAt or landingDate depending on sortOn)
+ * - ASC/DESC sorting
+ * - Paginated + aggregated totals
  */
 export const getAllInvoices = async (req, res) => {
     try {
@@ -14,34 +16,35 @@ export const getAllInvoices = async (req, res) => {
         // -----------------------------
         let {
             page = 1,
-            limit = 25,
+            limit = 10,
             search = "",
             status = "",
             fromDate = "",
             toDate = "",
-            sortOn = "landingDate",
-            sortOrder = "desc",
+            sortOn = "createdAt", // default: createdAt
+            sortOrder = "desc",   // default: descending
         } = req.query;
 
         // ✅ Defensive pagination setup
         const safePage = Math.max(Number(page) || 1, 1);
-        const allowedLimits = [5, 10, 25, 50, 100];
+        const allowedLimits = [10, 25, 50, 100];
         const safeLimit = allowedLimits.includes(Number(limit))
             ? Number(limit)
-            : 25;
+            : 10;
         const skip = (safePage - 1) * safeLimit;
 
         // ✅ Sorting
         const sortDirection = sortOrder === "asc" ? 1 : -1;
         const sortField = ["invoiceNo", "createdAt", "landingDate"].includes(sortOn)
             ? sortOn
-            : "landingDate";
+            : "createdAt";
 
         // -----------------------------
         // 🔍 Build Filters
         // -----------------------------
         const filter = {};
 
+        // 🔹 Search filter
         if (search?.trim()) {
             const regex = new RegExp(search.trim(), "i");
             filter.$or = [
@@ -54,10 +57,12 @@ export const getAllInvoices = async (req, res) => {
             ];
         }
 
+        // 🔹 Status filter
         if (status?.trim()) {
             filter.status = { $regex: `^${status}$`, $options: "i" };
         }
 
+        // 🔹 Date range filter (works on createdAt or landingDate)
         if (fromDate || toDate) {
             const dateRange = {};
             if (fromDate) dateRange.$gte = new Date(fromDate);
@@ -66,7 +71,7 @@ export const getAllInvoices = async (req, res) => {
                 to.setHours(23, 59, 59, 999);
                 dateRange.$lte = to;
             }
-            filter.landingDate = dateRange;
+            filter[sortField] = dateRange;
         }
 
         // -----------------------------
@@ -81,13 +86,31 @@ export const getAllInvoices = async (req, res) => {
                     totalAmount: { $sum: "$totalAmount" },
                     totalDiscount: { $sum: "$discountAmount" },
                     received: {
-                        $sum: { $cond: [{ $eq: ["$status", "Received"] }, 1, 0] },
+                        $sum: {
+                            $cond: [
+                                { $eq: [{ $toLower: "$status" }, "received"] },
+                                1,
+                                0,
+                            ],
+                        },
                     },
                     receivable: {
-                        $sum: { $cond: [{ $eq: ["$status", "Receivable"] }, 1, 0] },
+                        $sum: {
+                            $cond: [
+                                { $eq: [{ $toLower: "$status" }, "receivable"] },
+                                1,
+                                0,
+                            ],
+                        },
                     },
                     partial: {
-                        $sum: { $cond: [{ $eq: ["$status", "Partial"] }, 1, 0] },
+                        $sum: {
+                            $cond: [
+                                { $eq: [{ $toLower: "$status" }, "partial"] },
+                                1,
+                                0,
+                            ],
+                        },
                     },
                 },
             },
@@ -137,6 +160,9 @@ export const getAllInvoices = async (req, res) => {
             hasPrevPage: safePage > 1,
         };
 
+        // -----------------------------
+        // 🧮 Query Params Summary
+        // -----------------------------
         const params = {
             sortBy: sortOn,
             sortDir: sortOrder,

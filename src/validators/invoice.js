@@ -1,33 +1,58 @@
-// ../validators/invoice.js
 import { z } from "zod";
 
+// ✅ Common MongoDB ObjectId pattern
 export const objectId = z
     .string()
     .regex(/^[a-f\d]{24}$/i, "Invalid MongoDB ObjectId");
 
-// 📄 GET /invoices
+// ------------------------------------------------------------
+// 📄 GET /invoices (listInvoicesQuerySchema)
+// ------------------------------------------------------------
 export const listInvoicesQuerySchema = z.object({
-    page: z.coerce.number().min(1).optional(),
-    limit: z.coerce.number().min(1).max(100).optional(),
-    search: z.string().optional(),
-    fromDate: z.string().optional(),
-    toDate: z.string().optional(),
-    status: z.string().optional(),
-    sortOn: z.string().optional(),
-    sortOrder: z.string().optional(),
+    page: z.coerce.number().min(1).default(1),
+    limit: z
+        .coerce
+        .number()
+        .min(1)
+        .max(100)
+        .refine((val) => [10, 25, 50, 100].includes(val), {
+            message: "Limit must be one of 10, 25, 50, or 100",
+        })
+        .default(10),
+
+    search: z.string().trim().optional().default(""),
+    status: z.string().trim().optional().default(""),
+    fromDate: z.string().trim().optional().default(""),
+    toDate: z.string().trim().optional().default(""),
+
+    sortOn: z
+        .enum(["createdAt", "landingDate", "invoiceNo"])
+        .optional()
+        .default("createdAt"),
+
+    sortOrder: z
+        .enum(["asc", "desc"])
+        .optional()
+        .default("desc"),
 });
 
+// ------------------------------------------------------------
 // 📄 GET /invoices/booking/:bookingId
+// ------------------------------------------------------------
 export const getInvoiceByBookingParamSchema = z.object({
     bookingId: objectId,
 });
 
+// ------------------------------------------------------------
 // 📄 GET /invoices/:invoiceId/pdf  &  PUT /invoices/:invoiceId
+// ------------------------------------------------------------
 export const getInvoiceByIdParamSchema = z.object({
     invoiceId: objectId,
 });
 
-// ✏️ PUT /invoices/:invoiceId
+// ------------------------------------------------------------
+// ✏️ PUT /invoices/:invoiceId (updateInvoiceBodySchema)
+// ------------------------------------------------------------
 export const updateInvoiceBodySchema = z
     .object({
         items: z
@@ -38,6 +63,7 @@ export const updateInvoiceBodySchema = z
                 })
             )
             .optional(),
+
         discountAmount: z.number().min(0).optional(),
         vatIncluded: z.boolean().optional(),
         status: z.enum(["Received", "Receivable", "Partial"]).optional(),

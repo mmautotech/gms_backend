@@ -56,7 +56,7 @@ const generateInvoicePdf = (invoice, res, disposition = "inline", isProforma = f
     drawCell("INVOICE #", startX, y, 130, rowH, "left", true);
     drawCell(invoice.invoiceNo || "—", startX + 130, y, 130, rowH);
     drawCell("Invoice Date", startX + 260, y, 130, rowH, "left", true);
-    drawCell(invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString("en-GB") : "—", startX + 390, y, 170, rowH);
+    drawCell(invoice.createdAt ? new Date(invoice.createdAt).toLocaleDateString("en-GB") : "—", startX + 390, y, 170, rowH);
     y += rowH;
 
     drawCell("Customer Name", startX, y, 130, rowH, true);
