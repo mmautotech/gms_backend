@@ -1,3 +1,4 @@
+// controllers/internalInvoices/viewInternalInvoicePdf.js
 import path from "path";
 import PDFDocument from "pdfkit";
 import { fileURLToPath } from "url";
@@ -7,15 +8,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
- * ✅ Profit & Loss Style Internal Invoice Statement (PDF)
- * Mirrors getInternalInvoiceById data structure
+ * ✅ Internal Invoice (Profit & Loss Style)
+ * Opens inline in browser — same layout, with safe no-purchase handling.
  */
 export const viewInternalInvoicePdf = async (req, res) => {
     try {
         const { id } = req.params;
 
         // -----------------------------
-        // 🔍 Fetch Data
+        // 🔍 Fetch Internal Invoice
         // -----------------------------
         const inv = await InternalInvoice.findById(id)
             .populate({
@@ -36,12 +37,12 @@ export const viewInternalInvoicePdf = async (req, res) => {
             return res.status(404).json({ message: "Internal invoice not found" });
 
         // -----------------------------
-        // 🧾 PDF Setup
+        // 🧾 PDF Setup (Inline view)
         // -----------------------------
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader(
             "Content-Disposition",
-            `inline; filename=internal_${id}.pdf`
+            `inline; filename=internal_invoice_${id}.pdf`
         );
 
         const doc = new PDFDocument({ margin: 40, size: "A4" });
@@ -112,7 +113,8 @@ export const viewInternalInvoicePdf = async (req, res) => {
         doc.font("Helvetica-Bold").text("Booking Information", 60, startY);
         doc.font("Helvetica").fontSize(9);
         doc.text(
-            `Booking #: ${inv.booking?._id?.toString().slice(-6).toUpperCase() || "N/A"}`
+            `Booking #: ${inv.booking?._id?.toString().slice(-6).toUpperCase() || "N/A"
+            }`
         );
         doc.text(`Invoice Date: ${fmtDate(inv.invoice?.createdAt)}`);
         doc.text(`Booking Date: ${fmtDate(inv.booking?.createdAt)}`);
@@ -134,7 +136,7 @@ export const viewInternalInvoicePdf = async (req, res) => {
         doc.moveDown(0.8);
 
         // -----------------------------
-        // 💰 Income Section
+        // 💰 Income Section (Sales)
         // -----------------------------
         doc
             .font("Helvetica-Bold")
@@ -150,13 +152,21 @@ export const viewInternalInvoicePdf = async (req, res) => {
         let totalRevenue = 0;
         let totalVat = 0;
 
-        items.forEach((item) => {
-            const base = round2(item.amount || 0);
-            const vat = isVat ? round2(base * 0.2) : 0;
-            addLine(`• ${item.description || "N/A"}`, fmtVal(base));
-            totalRevenue += base;
-            totalVat += vat;
-        });
+        if (items.length === 0) {
+            doc
+                .font("Helvetica-Oblique")
+                .fillColor("#666")
+                .text("No invoice items recorded.", 60);
+            doc.moveDown(0.5);
+        } else {
+            items.forEach((item) => {
+                const base = round2(item.amount || 0);
+                const vat = isVat ? round2(base * 0.2) : 0;
+                addLine(`• ${item.description || "N/A"}`, fmtVal(base));
+                totalRevenue += base;
+                totalVat += vat;
+            });
+        }
 
         addLine("VAT (20%)", fmtVal(totalVat), false, "#666", true);
         addLine("Less: Discount", discount === 0 ? "–" : fmtVal(-discount));
@@ -166,7 +176,7 @@ export const viewInternalInvoicePdf = async (req, res) => {
         doc.moveDown(1);
 
         // -----------------------------
-        // 💸 Expense Section
+        // 💸 Expense Section (Purchases)
         // -----------------------------
         doc
             .font("Helvetica-Bold")
@@ -179,46 +189,60 @@ export const viewInternalInvoicePdf = async (req, res) => {
         let totalExpenses = 0;
         let totalPurchaseVat = 0;
 
-        purchases.forEach((pi) => {
+        if (!purchases.length) {
             doc
-                .font("Helvetica-Bold")
-                .fillColor("#000")
-                .text(`Supplier: ${pi.supplier?.name || "N/A"}`);
-            doc.moveDown(0.3);
+                .font("Helvetica-Oblique")
+                .fillColor("#666")
+                .text("No purchase invoices recorded for this booking.", 60);
+            doc.moveDown(1);
+        } else {
+            purchases.forEach((pi, index) => {
+                doc
+                    .font("Helvetica-Bold")
+                    .fillColor("#000")
+                    .text(`Supplier: ${pi.supplier?.name || "N/A"}`);
+                if (pi.supplier?.contact)
+                    doc
+                        .font("Helvetica")
+                        .fontSize(8)
+                        .fillColor("#555")
+                        .text(`Contact: ${pi.supplier.contact}`);
+                doc.moveDown(0.3);
 
-            let purchaseSubtotal = 0;
-            let purchaseVat = 0;
+                let purchaseSubtotal = 0;
+                let purchaseVat = 0;
 
-            pi.items?.forEach((p) => {
-                const base = round2((p.rate || 0) * (p.quantity || 1));
-                const vat = pi.vatIncluded ? round2(base * 0.2) : 0;
+                pi.items?.forEach((p) => {
+                    const base = round2((p.rate || 0) * (p.quantity || 1));
+                    const vat = pi.vatIncluded ? round2(base * 0.2) : 0;
+                    addLine(
+                        `   • ${p.part?.partName || "N/A"} × ${p.quantity}`,
+                        fmtVal(-base)
+                    );
+                    purchaseSubtotal += base;
+                    purchaseVat += vat;
+                });
+
+                addLine("   VAT (20%)", fmtVal(-purchaseVat), false, "#666", true);
+                const disc = round2(pi.discount || 0);
                 addLine(
-                    `   • ${p.part?.partName || "N/A"} × ${p.quantity}`,
-                    fmtVal(-base)
+                    "   Less: Purchase Discount",
+                    disc === 0 ? "–" : fmtVal(-disc)
                 );
-                purchaseSubtotal += base;
-                purchaseVat += vat;
+
+                purchaseSubtotal -= disc;
+                totalExpenses += purchaseSubtotal + purchaseVat;
+                totalPurchaseVat += purchaseVat;
+
+                addLine("----------------------------------------", "", false);
+                addLine(
+                    `Total Purchase - ${pi.supplier?.name || "N/A"}`,
+                    `£${fmtVal(-(purchaseSubtotal + purchaseVat))}`,
+                    true
+                );
+                if (index < purchases.length - 1) doc.moveDown(0.8);
             });
-
-            addLine("   VAT (20%)", fmtVal(-purchaseVat), false, "#666", true);
-            const disc = round2(pi.discount || 0);
-            addLine(
-                "   Less: Purchase Discount",
-                disc === 0 ? "–" : fmtVal(-disc)
-            );
-
-            purchaseSubtotal -= disc;
-            totalExpenses += purchaseSubtotal + purchaseVat;
-            totalPurchaseVat += purchaseVat;
-
-            addLine("----------------------------------------", "", false);
-            addLine(
-                `Total Purchase - ${pi.supplier?.name || "N/A"}`,
-                `£${fmtVal(-(purchaseSubtotal + purchaseVat))}`,
-                true
-            );
-            doc.moveDown(0.8);
-        });
+        }
 
         addLine("Total Expenses", `£${fmtVal(-totalExpenses)}`, true);
         doc.moveDown(1);
@@ -252,7 +276,7 @@ export const viewInternalInvoicePdf = async (req, res) => {
         );
 
         // -----------------------------
-        // 💧 Watermark (Non-Production)
+        // 💧 Watermark (for non-prod)
         // -----------------------------
         if (process.env.NODE_ENV !== "production") {
             doc
@@ -272,7 +296,9 @@ export const viewInternalInvoicePdf = async (req, res) => {
             .fontSize(8)
             .fillColor("#555")
             .text(
-                `Generated on: ${fmtDate(new Date())} | Confidential Internal Statement`,
+                `Generated on: ${fmtDate(
+                    new Date()
+                )} | Confidential Internal Statement`,
                 0,
                 doc.y + 4,
                 { align: "center" }

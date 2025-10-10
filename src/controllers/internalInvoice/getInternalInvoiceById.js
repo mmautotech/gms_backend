@@ -1,22 +1,30 @@
+// controllers/internalInvoice/getInternalInvoiceById.js
 import InternalInvoice from "../../models/InternalInvoice.js";
 
 /**
- * ✅ Get Single Internal Invoice (Detailed View)
- * _id = invoiceId (1-to-1 mapping)
+ * ✅ GET /api/internal-invoices/:id
+ * Returns full detailed view of one internal invoice, including:
+ * - Sales (Invoice items)
+ * - Purchases (Purchase invoices + parts)
+ * - Totals (Sales, Purchases, VAT, Profit)
  */
 export const getInternalInvoiceById = async (req, res) => {
     try {
         const { id } = req.params;
 
+        // 🔍 Fetch Internal Invoice + Deep Populations
         const inv = await InternalInvoice.findById(id)
             .populate({
                 path: "invoice",
-                populate: { path: "createdBy", select: "username" },
+                populate: [
+                    { path: "createdBy", select: "username email role" },
+                    { path: "booking", select: "vehicleRegNo makeModel" },
+                ],
             })
             .populate({
                 path: "purchaseInvoices",
                 populate: [
-                    { path: "purchaser", select: "username" },
+                    { path: "createdBy", select: "username" },
                     { path: "supplier", select: "name contact" },
                     { path: "items.part", select: "partName" },
                 ],
@@ -25,7 +33,10 @@ export const getInternalInvoiceById = async (req, res) => {
             .lean();
 
         if (!inv)
-            return res.status(404).json({ message: "Internal invoice not found" });
+            return res.status(404).json({
+                success: false,
+                message: "Internal invoice not found",
+            });
 
         // -----------------------------
         // 🧾 Helper Functions
@@ -34,7 +45,7 @@ export const getInternalInvoiceById = async (req, res) => {
         const safeNum = (v) => (isNaN(v) ? 0 : Number(v));
 
         // -----------------------------
-        // 🧾 INVOICE DETAILS
+        // 🧾 INVOICE DETAILS (Sales)
         // -----------------------------
         const invoice = inv.invoice || {};
         const invoiceItems =
@@ -59,24 +70,33 @@ export const getInternalInvoiceById = async (req, res) => {
         // 💸 PURCHASE INVOICES
         // -----------------------------
         const purchases =
-            inv.purchaseInvoices?.map((pi) => ({
-                purchaser: pi.purchaser?.username || "N/A",
-                supplier: pi.supplier?.name || "N/A",
-                supplierContact: pi.supplier?.contact || "N/A",
-                items:
+            inv.purchaseInvoices?.map((pi) => {
+                const items =
                     pi.items?.map((i) => ({
                         part: i.part?.partName || "N/A",
                         rate: round2(i.rate),
-                        quantity: i.quantity,
+                        quantity: i.quantity || 0,
                         lineTotal: round2((i.rate || 0) * (i.quantity || 0)),
-                    })) || [],
-                paymentDate: pi.paymentDate || null,
-                paymentStatus: pi.paymentStatus || "N/A",
-                discount: round2(pi.discount || 0),
-                vatIncluded: !!pi.vatIncluded,
-                vendorInvoiceNumber: pi.vendorInvoiceNumber || "N/A",
-                createdAt: pi.createdAt || null,
-            })) || [];
+                    })) || [];
+
+                const total = round2(
+                    items.reduce((sum, i) => sum + (i.lineTotal || 0), 0)
+                );
+
+                return {
+                    createdBy: pi.createdBy?.username || "N/A",
+                    supplier: pi.supplier?.name || "N/A",
+                    supplierContact: pi.supplier?.contact || "N/A",
+                    vendorInvoiceNumber: pi.vendorInvoiceNumber || "N/A",
+                    paymentDate: pi.paymentDate || null,
+                    paymentStatus: pi.paymentStatus || "N/A",
+                    discount: round2(pi.discount || 0),
+                    vatIncluded: !!pi.vatIncluded,
+                    total,
+                    items,
+                    createdAt: pi.createdAt || null,
+                };
+            }) || [];
 
         // -----------------------------
         // 📊 FINANCIAL TOTALS
@@ -87,7 +107,7 @@ export const getInternalInvoiceById = async (req, res) => {
         const calculatedProfit = round2(sales - purchaseTotal - netVat);
 
         // -----------------------------
-        // 📦 Response
+        // 📦 Response Payload
         // -----------------------------
         return res.status(200).json({
             success: true,
@@ -116,7 +136,7 @@ export const getInternalInvoiceById = async (req, res) => {
         console.error("❌ Error fetching internal invoice:", err);
         return res.status(500).json({
             success: false,
-            message: "Server error",
+            message: "Server error while fetching internal invoice",
             error: err.message,
         });
     }

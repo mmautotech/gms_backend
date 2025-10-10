@@ -4,7 +4,8 @@ import PurchaseInvoice from "../../models/PurchaseInvoice.js";
 
 /**
  * ✅ Create or Update an Internal Invoice
- * Uses `invoiceId` as the primary _id for InternalInvoice
+ * Uses `invoiceId` as the primary _id for InternalInvoice.
+ * Supports scenarios where 0–many Purchase Invoices exist for a booking.
  */
 export const createInternalInvoice = async (req, res) => {
     try {
@@ -22,16 +23,11 @@ export const createInternalInvoice = async (req, res) => {
             return res.status(404).json({ message: "Invoice not found" });
 
         // -----------------------------
-        // 🧾 Get Purchase Invoices
+        // 🧾 Get Purchase Invoices (0–many)
         // -----------------------------
         const purchaseInvoices = await PurchaseInvoice.find({
             booking: invoice.booking,
         });
-
-        if (!purchaseInvoices?.length)
-            return res.status(404).json({
-                message: "No purchase invoices found for this booking",
-            });
 
         // -----------------------------
         // 💰 SALES CALCULATION
@@ -44,7 +40,7 @@ export const createInternalInvoice = async (req, res) => {
                 const base = i.amount || 0;
                 sales += invoice.vatIncluded ? base + base * VAT_RATE : base;
             });
-        } else {
+        } else if (invoice.totalAmount) {
             sales = invoice.vatIncluded
                 ? invoice.totalAmount
                 : invoice.totalAmount * (1 + VAT_RATE);
@@ -57,24 +53,27 @@ export const createInternalInvoice = async (req, res) => {
         }
 
         // -----------------------------
-        // 💸 PURCHASES CALCULATION
+        // 💸 PURCHASES CALCULATION (0 or more)
         // -----------------------------
         let purchases = 0;
         let vatOnPurchases = 0;
 
-        purchaseInvoices.forEach((pi) => {
-            pi.items?.forEach((i) => {
-                const base = (i.rate || 0) * (i.quantity || 1);
-                purchases += pi.vatIncluded ? base + base * VAT_RATE : base;
-                if (pi.vatIncluded) vatOnPurchases += base * VAT_RATE;
+        if (purchaseInvoices?.length) {
+            purchaseInvoices.forEach((pi) => {
+                pi.items?.forEach((i) => {
+                    const base = (i.rate || 0) * (i.quantity || 1);
+                    purchases += pi.vatIncluded ? base + base * VAT_RATE : base;
+                    if (pi.vatIncluded) vatOnPurchases += base * VAT_RATE;
+                });
             });
-        });
+        }
 
         // -----------------------------
-        // 🧮 NET VAT & ROUNDING
+        // 🧮 COMPUTE TOTALS
         // -----------------------------
         const netVat = vatOnSales - vatOnPurchases;
-        const round2 = (v) => Number(v.toFixed(2));
+        const round2 = (v) => Number((v || 0).toFixed(2));
+
         const roundedSales = round2(sales);
         const roundedPurchases = round2(purchases);
         const roundedNetVat = round2(netVat);
@@ -94,12 +93,13 @@ export const createInternalInvoice = async (req, res) => {
             await internal.save();
 
             return res.status(200).json({
+                success: true,
                 message: "Internal invoice updated successfully",
                 data: internal,
             });
         }
 
-        // ✅ Create new internal invoice (using invoiceId as _id)
+        // ✅ Create new internal invoice (even if 0 purchases exist)
         internal = new InternalInvoice({
             _id: invoice._id, // 🔗 use invoiceId as the internal invoice _id
             booking: invoice.booking,
@@ -114,13 +114,15 @@ export const createInternalInvoice = async (req, res) => {
         await internal.save();
 
         return res.status(201).json({
+            success: true,
             message: "Internal invoice created successfully",
             data: internal,
         });
     } catch (err) {
         console.error("❌ Error creating/updating internal invoice:", err);
         res.status(500).json({
-            message: "Server error",
+            success: false,
+            message: "Server error while creating/updating internal invoice",
             error: err.message,
         });
     }

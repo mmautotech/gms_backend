@@ -1,4 +1,3 @@
-// src/routes/internalInvoiceRoutes.js
 import express from "express";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { validateWithZod } from "../middleware/zodMiddleware.js";
@@ -17,21 +16,26 @@ import {
 const router = express.Router();
 
 /**
- * @route POST /api/internal-invoices
- * @desc Create a new internal invoice
- * @access Private (Admin / Accountant)
+ * ============================================================
+ *  @route   POST /api/internal-invoices
+ *  @desc    Create or update an internal invoice
+ *  @access  Private (Admin / Accountant)
+ * ============================================================
  */
 router.post(
     "/",
     requireAuth,
+    requireRole("admin", "accountant"),
     validateWithZod(createInternalInvoiceSchema),
     createInternalInvoice
 );
 
 /**
- * @route GET /api/internal-invoices
- * @desc Get all internal invoices (with pagination & filters)
- * @access Private
+ * ============================================================
+ *  @route   GET /api/internal-invoices
+ *  @desc    Get all internal invoices (with pagination, filters, search)
+ *  @access  Private (Admin / Accountant / Manager)
+ * ============================================================
  */
 router.get(
     "/",
@@ -42,9 +46,11 @@ router.get(
 );
 
 /**
- * @route GET /api/internal-invoices/:id
- * @desc Get single internal invoice by ID
- * @access Private
+ * ============================================================
+ *  @route   GET /api/internal-invoices/:id
+ *  @desc    Get a single internal invoice (includes sales, purchases, VAT, profit)
+ *  @access  Private (Admin / Accountant / Manager)
+ * ============================================================
  */
 router.get(
     "/:id",
@@ -55,12 +61,15 @@ router.get(
 );
 
 /**
- * @route GET /api/internal-invoices/:id/pdf/view
- * @desc Generate & View PDF (Profit/Loss format)
- * @access Private
+ * ============================================================
+ *  @route   GET /api/internal-invoices/:id/pdf/view
+ *  @desc    Generate & View Internal Invoice PDF (Profit/Loss format)
+ *  @access  Private (All Authenticated Users)
+ * ============================================================
  */
 router.get(
     "/:id/pdf/view",
+    requireAuth,
     validateWithZod(internalInvoiceIdParamSchema, "params"),
     viewInternalInvoicePdf
 );

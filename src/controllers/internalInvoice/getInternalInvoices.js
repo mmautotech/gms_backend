@@ -1,11 +1,16 @@
 import InternalInvoice from "../../models/InternalInvoice.js";
 
 /**
- * ✅ Aggregated Internal Invoice Listing (Paginated + Search + Filters + Totals)
- * Profit = Sales - Purchases - NetVat
+ * ✅ GET /api/internal-invoices
+ * Fetch all internal invoices with filters, pagination, sorting, and totals.
+ * Supports: Pagination, Search, Status (Partial / Receivable / Received / Cancelled),
+ * Date range, Sorting, Totals summary.
  */
 export const getInternalInvoices = async (req, res) => {
     try {
+        // -----------------------------
+        // 🧾 Extract Query Params
+        // -----------------------------
         const {
             page = 1,
             limit = 25,
@@ -17,74 +22,61 @@ export const getInternalInvoices = async (req, res) => {
             sortOrder = "desc",
         } = req.query;
 
-        // -----------------------------
-        // ⚙️ Safe Pagination + Sorting Setup
-        // -----------------------------
-        const allowedLimits = [5, 25, 50, 100];
-        const safeLimit = allowedLimits.includes(Number(limit))
-            ? Number(limit)
-            : 25;
-        const safePage = Math.max(Number(page) || 1, 1);
-        const skip = (safePage - 1) * safeLimit;
-
-        const sortDirection = sortOrder === "asc" ? 1 : -1;
-        const sortField =
-            sortOn === "createDate" ? "createdAt" : "booking.arrivedAt";
+        const skip = (page - 1) * limit;
 
         // -----------------------------
-        // 🔎 Match Filters
+        // ⚙️ Build Filters
         // -----------------------------
-        const match = [];
+        const match = {};
 
-        if (search?.trim()) {
-            const term = search.trim();
-            match.push({
-                $or: [
-                    { "booking.vehicleRegNo": { $regex: term, $options: "i" } },
-                    { "booking.makeModel": { $regex: term, $options: "i" } },
-                    { "invoice.invoiceNo": { $regex: term, $options: "i" } },
-                    { "invoice.customerName": { $regex: term, $options: "i" } },
-                ],
-            });
-        }
-
-        if (status?.trim()) {
-            match.push({
-                "invoice.status": { $regex: `^${status}$`, $options: "i" },
-            });
-        }
-
+        // Date range (createdAt)
         if (fromDate || toDate) {
-            const from = fromDate ? new Date(fromDate) : null;
-            const to = toDate ? new Date(toDate) : null;
-            if (to) to.setHours(23, 59, 59, 999);
-
-            match.push({
-                [sortOn === "createDate" ? "createdAt" : "booking.arrivedAt"]: {
-                    ...(from && { $gte: from }),
-                    ...(to && { $lte: to }),
-                },
-            });
+            match.createdAt = {};
+            if (fromDate) match.createdAt.$gte = new Date(fromDate);
+            if (toDate) match.createdAt.$lte = new Date(toDate);
         }
 
-        const matchStage = match.length ? { $and: match } : {};
+        // -----------------------------
+        // 🔍 Search Filter
+        // -----------------------------
+        const searchFilter = search
+            ? {
+                $or: [
+                    { "invoice.invoiceNo": { $regex: search, $options: "i" } },
+                    { "invoice.customerName": { $regex: search, $options: "i" } },
+                    { "invoice.contactNo": { $regex: search, $options: "i" } },
+                    { "booking.vehicleRegNo": { $regex: search, $options: "i" } },
+                    { "booking.makeModel": { $regex: search, $options: "i" } },
+                ],
+            }
+            : {};
 
         // -----------------------------
-        // 🧮 Aggregation Pipeline
+        // 🧮 Status Filter (Allowed only 4)
+        // -----------------------------
+        const allowedStatuses = ["Partial", "Receivable", "Received", "Cancelled"];
+        let statusFilter = {};
+
+        if (status) {
+            const normalized = status.trim().toLowerCase();
+            const matched = allowedStatuses.find(
+                (s) => s.toLowerCase() === normalized
+            );
+            if (matched) {
+                statusFilter = { "invoice.status": { $regex: `^${matched}$`, $options: "i" } };
+            } else {
+                // Invalid status — return no results
+                return res.status(400).json({
+                    success: false,
+                    message: `Invalid status '${status}'. Allowed: ${allowedStatuses.join(", ")}`,
+                });
+            }
+        }
+
+        // -----------------------------
+        // 🧱 Aggregation Pipeline
         // -----------------------------
         const pipeline = [
-            // Lookup booking
-            {
-                $lookup: {
-                    from: "bookings",
-                    localField: "booking",
-                    foreignField: "_id",
-                    as: "booking",
-                },
-            },
-            { $unwind: "$booking" },
-
-            // Lookup invoice
             {
                 $lookup: {
                     from: "invoices",
@@ -94,158 +86,126 @@ export const getInternalInvoices = async (req, res) => {
                 },
             },
             { $unwind: "$invoice" },
-
-            // Apply filters
-            { $match: matchStage },
-
-            // Sort early
-            { $sort: { [sortField]: sortDirection } },
-
-            // Derived fields
             {
-                $addFields: {
-                    vehicle: {
-                        $concat: [
-                            { $ifNull: ["$booking.vehicleRegNo", "N/A"] },
-                            " (",
-                            { $ifNull: ["$booking.makeModel", "N/A"] },
-                            ")",
-                        ],
-                    },
-                    invoiceNo: "$invoice.invoiceNo",
-                    customerName: "$invoice.customerName",
-                    status: "$invoice.status",
-                    landingDate: "$booking.arrivedAt",
-                    calculatedProfit: {
-                        $subtract: [
-                            { $subtract: ["$sales", "$purchases"] },
-                            { $ifNull: ["$netVat", 0] },
-                        ],
-                    },
+                $lookup: {
+                    from: "bookings",
+                    localField: "booking",
+                    foreignField: "_id",
+                    as: "booking",
                 },
             },
-
+            { $unwind: "$booking" },
+            {
+                $match: {
+                    ...match,
+                    ...searchFilter,
+                    ...statusFilter,
+                },
+            },
+            {
+                $sort: {
+                    [sortOn === "landingDate"
+                        ? "invoice.landingDate"
+                        : "invoice.createdAt"]: sortOrder === "asc" ? 1 : -1,
+                },
+            },
             {
                 $project: {
                     _id: 1,
-                    invoiceNo: 1,
-                    customerName: 1,
-                    status: 1,
-                    vehicle: 1,
+                    invoiceNo: "$invoice.invoiceNo",
+                    landingDate: "$invoice.landingDate",
+                    customerName: "$invoice.customerName",
+                    vehicle: {
+                        $concat: [
+                            "$booking.vehicleRegNo",
+                            " (",
+                            "$booking.makeModel",
+                            ")",
+                        ],
+                    },
+                    status: {
+                        $cond: [
+                            { $ifNull: ["$invoice.status", false] },
+                            "$invoice.status",
+                            "Unknown",
+                        ],
+                    },
                     sales: 1,
                     purchases: 1,
                     netVat: 1,
-                    calculatedProfit: 1,
-                    landingDate: 1,
-                    createdAt: 1,
-                },
-            },
-
-            // Parallel aggregation
-            {
-                $facet: {
-                    metadata: [{ $count: "total" }],
-                    totals: [
-                        {
-                            $group: {
-                                _id: null,
-                                totalSales: { $sum: "$sales" },
-                                totalPurchases: { $sum: "$purchases" },
-                                totalNetVat: {
-                                    $sum: { $ifNull: ["$netVat", 0] },
-                                },
-                                totalProfit: {
-                                    $sum: {
-                                        $subtract: [
-                                            { $subtract: ["$sales", "$purchases"] },
-                                            { $ifNull: ["$netVat", 0] },
-                                        ],
-                                    },
-                                },
-                            },
-                        },
-                    ],
-                    data: [{ $skip: skip }, { $limit: safeLimit }],
+                    calculatedProfit: {
+                        $subtract: [
+                            { $subtract: ["$sales", "$purchases"] },
+                            "$netVat",
+                        ],
+                    },
+                    createdAt: "$invoice.createdAt",
                 },
             },
         ];
 
-        const result = await InternalInvoice.aggregate(pipeline, {
-            allowDiskUse: true,
-        });
-
         // -----------------------------
-        // 📊 Format Response
+        // 📊 Totals Calculation (Before Pagination)
         // -----------------------------
-        const data = result[0]?.data || [];
-        const totalInvoices = result[0]?.metadata[0]?.total || 0;
-        const totalPages = Math.ceil(totalInvoices / safeLimit) || 1;
-
-        const totals = result[0]?.totals[0] || {
-            totalSales: 0,
-            totalPurchases: 0,
-            totalNetVat: 0,
-            totalProfit: 0,
-        };
-
-        const pagination = {
-            total: totalInvoices,
-            page: safePage,
-            limit: safeLimit,
-            totalPages,
-            hasNextPage: safePage < totalPages,
-            hasPrevPage: safePage > 1,
-        };
-
-        // Backend execution parameters (internal)
-        const params = {
-            sortBy: sortOn === "createDate" ? "createdDate" : "landingDate",
-            sortDir: sortOrder,
-            perPage: safeLimit,
-            page: safePage,
-        };
-
-        // Applied user filters (for UI)
-        const appliedFilters = {
-            search: search || null,
-            status: status || null,
-            fromDate: fromDate || null,
-            toDate: toDate || null,
-            sortOn,
-            sortOrder,
-        };
-
-        // -----------------------------
-        // ✅ Response
-        // -----------------------------
-        return res.status(200).json({
-            success: true,
-            params, // backend pagination & sort info
-            appliedFilters, // UI-visible filter state
-            pagination,
-            totals: {
-                totalSales: Number(totals.totalSales?.toFixed(2)) || 0,
-                totalPurchases: Number(totals.totalPurchases?.toFixed(2)) || 0,
-                totalNetVat: Number(totals.totalNetVat?.toFixed(2)) || 0,
-                totalProfit: Number(totals.totalProfit?.toFixed(2)) || 0,
+        const totalsPipeline = [
+            ...pipeline,
+            {
+                $group: {
+                    _id: null,
+                    totalSales: { $sum: "$sales" },
+                    totalPurchases: { $sum: "$purchases" },
+                    totalNetVat: { $sum: "$netVat" },
+                    totalProfit: { $sum: "$calculatedProfit" },
+                    count: { $sum: 1 },
+                },
             },
-            data,
+        ];
+
+        const totalsResult = await InternalInvoice.aggregate(totalsPipeline);
+        const totals =
+            totalsResult[0] || {
+                totalSales: 0,
+                totalPurchases: 0,
+                totalNetVat: 0,
+                totalProfit: 0,
+                count: 0,
+            };
+
+        // -----------------------------
+        // 📄 Paginated Data
+        // -----------------------------
+        const paginatedPipeline = [...pipeline, { $skip: skip }, { $limit: Number(limit) }];
+        const invoices = await InternalInvoice.aggregate(paginatedPipeline);
+        const totalCount = totals.count;
+        const totalPages = Math.ceil(totalCount / limit);
+
+        // -----------------------------
+        // ✅ Final Response
+        // -----------------------------
+        res.status(200).json({
+            success: true,
+            pagination: {
+                total: totalCount,
+                page: Number(page),
+                limit: Number(limit),
+                totalPages,
+                hasNextPage: page < totalPages,
+                hasPrevPage: page > 1,
+            },
+            totals: {
+                totalSales: Number(totals.totalSales.toFixed(2)),
+                totalPurchases: Number(totals.totalPurchases.toFixed(2)),
+                totalNetVat: Number(totals.totalNetVat.toFixed(2)),
+                totalProfit: Number(totals.totalProfit.toFixed(2)),
+            },
+            data: invoices,
         });
     } catch (err) {
         console.error("❌ Error fetching internal invoices:", err);
-        return res.status(500).json({
+        res.status(500).json({
             success: false,
-            message: "Server error",
+            message: "Server error while fetching internal invoices",
             error: err.message,
         });
     }
 };
-
-/**
- * 🧩 Recommended Indexes (run once in Mongo shell)
- *
- * db.internalinvoices.createIndex({ "booking.arrivedAt": -1 });
- * db.internalinvoices.createIndex({ createdAt: -1 });
- * db.internalinvoices.createIndex({ "invoice.invoiceNo": 1 });
- * db.internalinvoices.createIndex({ "booking.vehicleRegNo": 1 });
- */
