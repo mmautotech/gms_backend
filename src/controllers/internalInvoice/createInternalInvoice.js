@@ -2,11 +2,6 @@ import InternalInvoice from "../../models/InternalInvoice.js";
 import Invoice from "../../models/Invoice.js";
 import PurchaseInvoice from "../../models/PurchaseInvoice.js";
 
-/**
- * ✅ Create or Update an Internal Invoice
- * Uses `invoiceId` as the primary _id for InternalInvoice.
- * Supports scenarios where 0–many Purchase Invoices exist for a booking.
- */
 export const createInternalInvoice = async (req, res) => {
     try {
         const { invoiceId } = req.body;
@@ -16,79 +11,87 @@ export const createInternalInvoice = async (req, res) => {
             return res.status(400).json({ message: "invoiceId is required" });
 
         // -----------------------------
-        // 🔍 Validate Invoice
+        // Fetch main invoice
         // -----------------------------
         const invoice = await Invoice.findById(invoiceId);
         if (!invoice)
             return res.status(404).json({ message: "Invoice not found" });
 
         // -----------------------------
-        // 🧾 Get Purchase Invoices (0–many)
+        // Fetch purchase invoices
         // -----------------------------
         const purchaseInvoices = await PurchaseInvoice.find({
             booking: invoice.booking,
         });
 
         // -----------------------------
-        // 💰 SALES CALCULATION
+        // Sales calculation
         // -----------------------------
-        let sales = 0;
-        let vatOnSales = 0;
-
-        if (invoice.items?.length) {
-            invoice.items.forEach((i) => {
-                const base = i.amount || 0;
-                sales += invoice.vatIncluded ? base + base * VAT_RATE : base;
-            });
-        } else if (invoice.totalAmount) {
-            sales = invoice.vatIncluded
-                ? invoice.totalAmount
-                : invoice.totalAmount * (1 + VAT_RATE);
-        }
-
-        // Calculate VAT on sales (if included)
-        if (invoice.vatIncluded) {
-            const taxableBase = sales / (1 + VAT_RATE);
-            vatOnSales = taxableBase * VAT_RATE;
-        }
+        const sales = invoice.totalAmount || 0;
 
         // -----------------------------
-        // 💸 PURCHASES CALCULATION (0 or more)
+        // Purchases calculation + Purchase VAT
         // -----------------------------
         let purchases = 0;
-        let vatOnPurchases = 0;
+        let purchaseVat = 0;
 
         if (purchaseInvoices?.length) {
             purchaseInvoices.forEach((pi) => {
                 pi.items?.forEach((i) => {
                     const base = (i.rate || 0) * (i.quantity || 1);
-                    purchases += pi.vatIncluded ? base + base * VAT_RATE : base;
-                    if (pi.vatIncluded) vatOnPurchases += base * VAT_RATE;
+                    if (pi.vatIncluded) {
+                        const vat = base * VAT_RATE;
+                        purchaseVat += vat; // ✅ only add VAT separately
+                        purchases += base; // ✅ store purchase without VAT
+                    } else {
+                        purchases += base;
+                    }
                 });
             });
         }
 
         // -----------------------------
-        // 🧮 COMPUTE TOTALS
+        // Sales VAT (output VAT)
         // -----------------------------
-        const netVat = vatOnSales - vatOnPurchases;
-        const round2 = (v) => Number((v || 0).toFixed(2));
+        const salesVat = invoice.vatIncluded
+            ? sales - sales / (1 + VAT_RATE)
+            : 0;
 
+        // -----------------------------
+        // Net VAT (sales VAT + purchase VAT if vatIncluded)
+        // -----------------------------
+        const netVat = salesVat + purchaseVat;
+
+        // -----------------------------
+        // Profit = Sales - Purchases - Net VAT
+        // -----------------------------
+        const profit = sales - purchases - netVat;
+
+        // -----------------------------
+        // Round values
+        // -----------------------------
+        const round2 = (v) => Number((v || 0).toFixed(2));
         const roundedSales = round2(sales);
         const roundedPurchases = round2(purchases);
         const roundedNetVat = round2(netVat);
+        const roundedProfit = round2(profit);
 
         // -----------------------------
-        // 🔁 UPSERT (Create or Update)
+        // Upsert internal invoice
         // -----------------------------
         let internal = await InternalInvoice.findById(invoiceId);
 
         if (internal) {
-            // ✅ Update existing internal invoice
             internal.purchaseInvoices = purchaseInvoices.map((pi) => pi._id);
             internal.sales = roundedSales;
             internal.purchases = roundedPurchases;
             internal.netVat = roundedNetVat;
+            internal.profit = roundedProfit;
+            internal.discountSales = invoice.discountAmount || 0;
+            internal.discountPurchases = purchaseInvoices.reduce(
+                (sum, pi) => sum + (pi.discountAmount || 0),
+                0
+            );
             internal.updatedBy = req.user?._id;
             await internal.save();
 
@@ -99,15 +102,23 @@ export const createInternalInvoice = async (req, res) => {
             });
         }
 
-        // ✅ Create new internal invoice (even if 0 purchases exist)
+        // -----------------------------
+        // Create new internal invoice
+        // -----------------------------
         internal = new InternalInvoice({
-            _id: invoice._id, // 🔗 use invoiceId as the internal invoice _id
+            _id: invoice._id,
             booking: invoice.booking,
             invoice: invoice._id,
             purchaseInvoices: purchaseInvoices.map((pi) => pi._id),
             sales: roundedSales,
             purchases: roundedPurchases,
             netVat: roundedNetVat,
+            profit: roundedProfit,
+            discountSales: invoice.discountAmount || 0,
+            discountPurchases: purchaseInvoices.reduce(
+                (sum, pi) => sum + (pi.discountAmount || 0),
+                0
+            ),
             createdBy: req.user?._id,
         });
 
