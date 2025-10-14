@@ -32,8 +32,8 @@ export const createBookingSchema = z.object({
 // -----------------------------
 export const listBookingsQuerySchema = z.object({
     page: z.coerce.number().min(1).optional(),
-    limit: z.coerce.number().refine((val) => [5, 25, 50, 100].includes(val), {
-        message: "Limit must be one of [5, 25, 50, 100]",
+    limit: z.coerce.number().refine((val) => [5, 10, 50, 100].includes(val), {
+        message: "Limit must be one of [5, 10, 50, 100]",
     }).optional(),
 
     status: z.preprocess(
@@ -83,8 +83,8 @@ export const listPendingBookingsQuerySchema = z.object({
     page: z.coerce.number().min(1).optional(),
     limit: z
         .coerce.number()
-        .refine((val) => [5, 25, 50, 100].includes(val), {
-            message: "Limit must be one of [5, 25, 50, 100]",
+        .refine((val) => [5, 10, 50, 100].includes(val), {
+            message: "Limit must be one of [5, 10, 50, 100]",
         })
         .optional(),
 
@@ -115,8 +115,8 @@ export const listPendingBookingsQuerySchema = z.object({
 export const listArrivedBookingsQuerySchema = z.object({
     page: z.coerce.number().min(1).optional(),
     limit: z.coerce.number()
-        .refine((val) => [5, 25, 50, 100].includes(val), {
-            message: "Limit must be one of [5, 25, 50, 100]",
+        .refine((val) => [5, 10, 50, 100].includes(val), {
+            message: "Limit must be one of [5, 10, 50, 100]",
         })
         .optional(),
 

@@ -9,7 +9,7 @@ export const getAllPendingBookings = async (req, res) => {
 
         let {
             page = 1,
-            limit = 25,
+            limit = 10,
             sortBy = "createdDate",
             sortDir,
             fromDate,
@@ -21,8 +21,8 @@ export const getAllPendingBookings = async (req, res) => {
 
         // 📌 Pagination
         limit = Number(limit);
-        const allowedLimits = [5, 25, 50, 100];
-        if (!allowedLimits.includes(limit)) limit = 25;
+        const allowedLimits = [5, 10, 50, 100];
+        if (!allowedLimits.includes(limit)) limit = 10;
 
         page = Number(page);
         const skip = (page - 1) * limit;

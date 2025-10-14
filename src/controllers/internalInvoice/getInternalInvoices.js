@@ -13,7 +13,7 @@ export const getInternalInvoices = async (req, res) => {
         // -----------------------------
         const {
             page = 1,
-            limit = 25,
+            limit = 10,
             search = "",
             status = "",
             fromDate = "",

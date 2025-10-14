@@ -5,7 +5,7 @@ export const getInvoices = async (req, res) => {
     try {
         let {
             page = 1,
-            limit = 25,
+            limit = 10,
             sortBy = "createdAt",
             sortOrder = "desc",
             supplier,
@@ -22,8 +22,8 @@ export const getInvoices = async (req, res) => {
         limit = Number(limit);
 
         // ✅ enforce allowed limits
-        const ALLOWED_LIMITS = [5, 25, 50, 100];
-        if (!ALLOWED_LIMITS.includes(limit)) limit = 25;
+        const ALLOWED_LIMITS = [5, 10, 50, 100];
+        if (!ALLOWED_LIMITS.includes(limit)) limit = 10;
 
         const skip = (page - 1) * limit;
 

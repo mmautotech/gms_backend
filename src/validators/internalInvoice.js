@@ -56,7 +56,7 @@ export const listInternalInvoicesQuerySchema = z
                 message: "Limit must be between 1 and 200",
             })
             .optional()
-            .default("25"),
+            .default("10"),
 
         // 🔍 Universal Search
         search: z.string().trim().optional().default(""),

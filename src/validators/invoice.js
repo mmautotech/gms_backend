@@ -15,8 +15,8 @@ export const listInvoicesQuerySchema = z.object({
         .number()
         .min(1)
         .max(100)
-        .refine((val) => [10, 25, 50, 100].includes(val), {
-            message: "Limit must be one of 10, 25, 50, or 100",
+        .refine((val) => [10, 10, 50, 100].includes(val), {
+            message: "Limit must be one of 10, 10, 50, or 100",
         })
         .default(10),
 

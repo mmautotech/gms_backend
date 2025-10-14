@@ -2,6 +2,8 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
+import http from 'http';
+import { Server } from 'socket.io';
 
 import authRoutes from './src/routes/auth.js';
 import bookingRoutes from './src/routes/bookings.js';
@@ -13,7 +15,7 @@ import invoiceRoutes from './src/routes/invoiceRoutes.js';
 import purchaseInvoiceRoutes from './src/routes/purchaseInvoiceRoutes.js';
 import internalInvoiceRoutes from './src/routes/internalInvoiceroutes.js';
 import { errorHandlerMiddleware } from "./src/utils/errorHandler.js";
-import dashoardRoutes from "./src/routes/dashboardRoutes.js"
+import dashoardRoutes from "./src/routes/dashboardRoutes.js";
 import userRoutes from "./src/routes/user.js";
 
 const app = express();
@@ -46,7 +48,6 @@ app.use((req, res, next) => {
 /** -------------------------------
  * 📦 Body Parsers (with Base64 Support)
  -------------------------------- */
-// Supports JSON and base64 uploads up to 5MB
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
@@ -88,7 +89,7 @@ app.use((err, req, res, _next) => {
 });
 
 /** -------------------------------
- * 🚀 Connect DB and Start Server
+ * 🚀 Connect DB and Start Server with Socket.IO
  -------------------------------- */
 const { MONGO_URI, PORT = 5000 } = process.env;
 
@@ -96,8 +97,36 @@ mongoose
     .connect(MONGO_URI, { dbName: 'Gms' })
     .then(() => {
         console.log('✅ MongoDB connected to gms_db');
-        app.listen(PORT, "0.0.0.0", () => {
-            console.log(`🚀 API running at http://192.168.18.84:${PORT}`);
+
+        // Create HTTP server for Socket.IO
+        const server = http.createServer(app);
+
+        // Setup Socket.IO
+        const io = new Server(server, {
+            cors: {
+                origin: [
+                    'http://localhost:3000',
+                    'http://192.168.18.84:3000',
+                    'http://192.168.18.84'
+                ],
+                methods: ['GET', 'POST'],
+                credentials: true,
+            },
+        });
+
+        // Make io accessible in routes/controllers
+        app.set('io', io);
+
+        io.on('connection', (socket) => {
+            console.log('User connected:', socket.id);
+            socket.on('disconnect', () => {
+                console.log('User disconnected:', socket.id);
+            });
+        });
+
+        // Start server
+        server.listen(PORT, "0.0.0.0", () => {
+            console.log(`🚀 API + Socket.IO running at http://192.168.18.84:${PORT}`);
         });
 
     })

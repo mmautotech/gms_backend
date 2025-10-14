@@ -4,7 +4,7 @@ import Booking from "../../models/Booking.js";
 
 /**
  * ✅ Generate invoice number in format DDMMYY-ABC
- * e.g. 081025-001
+ * e.g. 081010-001
  */
 const generateInvoiceNo = async () => {
     const today = new Date();

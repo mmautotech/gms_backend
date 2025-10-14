@@ -81,9 +81,9 @@ export const invoiceQuerySchema = z.object({
 
     // ✅ only allow specific limits
     limit: z.coerce.number().refine(
-        (val) => [5, 25, 50, 100].includes(val),
-        { message: "Limit must be one of 5, 25, 50, or 100" }
-    ).default(25),
+        (val) => [5, 10, 50, 100].includes(val),
+        { message: "Limit must be one of 5, 10, 50, or 100" }
+    ).default(10),
 
     // Filters
     purchaser: z.string().optional(),

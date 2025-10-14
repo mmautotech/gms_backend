@@ -37,15 +37,14 @@ export const createBooking = async (req, res) => {
 
         let originalBuffer = null;
         let compressedBuffer = null;
-        let mimeType = "image/jpeg"; // fallback
+        let mimeType = "image/jpeg";
 
         if (bookingConfirmationPhoto?.startsWith("data:image/")) {
             const [meta, base64Data] = bookingConfirmationPhoto.split(";base64,");
-            mimeType = meta.replace("data:", ""); // e.g. "image/png" | "image/jpeg"
+            mimeType = meta.replace("data:", "");
 
             const buffer = Buffer.from(base64Data, "base64");
 
-            // 🔹 Normalize and store both versions
             if (mimeType.includes("png")) {
                 originalBuffer = await sharp(buffer).png({ compressionLevel: 9 }).toBuffer();
                 compressedBuffer = await sharp(buffer)
@@ -75,12 +74,21 @@ export const createBooking = async (req, res) => {
         await computeTotals(booking);
         await booking.save();
 
+        // 🔹 Emit to all connected clients in real-time
+        const io = req.app.get("io");
+        if (io) {
+            io.emit("booking:created", {
+                ...booking.toObject(),
+                bookingConfirmationPhoto: undefined,
+                bookingConfirmationPhotoCompressed: undefined,
+            });
+        }
+
         res.status(201).json({
             success: true,
             message: "Booking created successfully",
             booking: {
                 ...booking.toObject(),
-                // don’t send heavy binaries in API response
                 bookingConfirmationPhoto: undefined,
                 bookingConfirmationPhotoCompressed: undefined,
             },

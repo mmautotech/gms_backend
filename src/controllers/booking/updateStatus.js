@@ -1,3 +1,4 @@
+// src/controllers/bookings/updateBookingStatus.js
 import mongoose from "mongoose";
 import Booking from "../../models/Booking.js";
 import { sendError } from "../../utils/errorHandler.js";
@@ -15,10 +16,7 @@ export const updateBookingStatus = async (req, res) => {
             return sendError(res, 400, "New status is required");
         }
 
-        // normalize request → lowerCase
         const normalizedStatus = status.toLowerCase();
-
-
         let booking = await Booking.findById(id);
         if (!booking) return sendError(res, 404, "Booking not found");
 
@@ -37,10 +35,12 @@ export const updateBookingStatus = async (req, res) => {
             );
         }
 
+        const previousStatus = booking.status;
         const userId = req.user?._id;
         const userName = req.user?.username || "Unknown user";
         const now = new Date();
 
+        // Update booking
         booking.status = normalizedStatus;
         booking.updatedBy = userId;
 
@@ -60,6 +60,30 @@ export const updateBookingStatus = async (req, res) => {
         }
 
         await booking.save({ allowEdit: true });
+
+        // ✅ Emit socket updates to all connected clients
+        const io = req.app.get("io");
+
+        // Broadcast the general status change
+        io.emit("booking:statusChanged", {
+            _id: booking._id,
+            status: booking.status,
+            updatedBy: userName,
+            booking,
+        });
+
+        // 🚗 Special logic for PreBooking ↔ CarIn transition
+        if (previousStatus === BOOKING_STATUS.PENDING && normalizedStatus === BOOKING_STATUS.ARRIVED) {
+            // Remove from PreBooking lists
+            io.emit("booking:removedFromPreBooking", { _id: booking._id });
+            // Add to CarIn lists
+            io.emit("booking:addedToCarIn", booking);
+        }
+
+        if (previousStatus === BOOKING_STATUS.ARRIVED && normalizedStatus === BOOKING_STATUS.COMPLETED) {
+            // Remove from CarIn list
+            io.emit("booking:removedFromCarIn", { _id: booking._id });
+        }
 
         return res.json({
             success: true,

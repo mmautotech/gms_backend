@@ -1,4 +1,3 @@
-// src/controllers/booking/getAllBookings.js
 import mongoose from "mongoose";
 import Booking from "../../models/Booking.js";
 
@@ -8,7 +7,7 @@ export const getAllBookings = async (req, res) => {
     try {
         let {
             page = 1,
-            limit = 25,
+            limit = 10,
             sortBy = "createdDate",
             sortDir,
             status,
@@ -16,18 +15,18 @@ export const getAllBookings = async (req, res) => {
             toDate,
             search,
             services,
-            user, // ✅ new filter
+            user,
         } = req.query;
 
-        // 📌 Pagination
+        // Pagination
         limit = Number(limit);
-        const allowedLimits = [5, 25, 50, 100];
-        if (!allowedLimits.includes(limit)) limit = 25;
+        const allowedLimits = [5, 10, 50, 100];
+        if (!allowedLimits.includes(limit)) limit = 10;
 
         page = Number(page);
         const skip = (page - 1) * limit;
 
-        // 📌 Sort field mapping
+        // Sort mapping
         const SORT_FIELD_MAP = {
             createdDate: "createdAt",
             scheduledDate: "scheduledDate",
@@ -41,7 +40,6 @@ export const getAllBookings = async (req, res) => {
         };
         const dbSortField = SORT_FIELD_MAP[sortBy] ?? "createdAt";
 
-        // 📌 Default sort direction
         const DATE_FIELDS = new Set([
             "createdDate",
             "scheduledDate",
@@ -49,27 +47,24 @@ export const getAllBookings = async (req, res) => {
             "cancelledDate",
             "completedDate",
         ]);
-        const userProvidedSortDir = typeof req.query.sortDir !== "undefined";
-        const effectiveSortDir = userProvidedSortDir
-            ? String(sortDir).toLowerCase()
-            : DATE_FIELDS.has(sortBy)
-                ? "desc"
-                : "asc";
+
+        const effectiveSortDir =
+            typeof sortDir !== "undefined"
+                ? String(sortDir).toLowerCase()
+                : DATE_FIELDS.has(sortBy)
+                    ? "desc"
+                    : "asc";
 
         const sortOrder = effectiveSortDir === "desc" ? -1 : 1;
 
-        // 📌 Filters
+        // Filters
         const filter = {};
 
-        // Status
         if (typeof status === "string" && status.trim() !== "") {
             const normStatus = status.trim().toLowerCase();
-            if (ALLOWED_STATUS.has(normStatus)) {
-                filter.status = normStatus;
-            }
+            if (ALLOWED_STATUS.has(normStatus)) filter.status = normStatus;
         }
 
-        // Date range
         if (fromDate || toDate) {
             const DATE_FIELD_MAP = {
                 createdDate: "createdAt",
@@ -78,28 +73,23 @@ export const getAllBookings = async (req, res) => {
                 cancelledDate: "cancelledAt",
                 completedDate: "completedAt",
             };
-
             const dateFilterField = DATE_FIELD_MAP[sortBy] || "createdAt";
             filter[dateFilterField] = {};
-
             if (fromDate) filter[dateFilterField].$gte = new Date(fromDate);
             if (toDate) {
                 const to = new Date(toDate);
                 to.setHours(23, 59, 59, 999);
                 filter[dateFilterField].$lte = to;
             }
-
             if (Object.keys(filter[dateFilterField]).length === 0) {
                 delete filter[dateFilterField];
             }
         }
 
-        // Text search
         if (typeof search === "string" && search.trim()) {
             filter.$text = { $search: search.trim() };
         }
 
-        // Services filter
         if (services) {
             const ids = String(services)
                 .split(",")
@@ -108,7 +98,6 @@ export const getAllBookings = async (req, res) => {
             if (ids.length > 0) filter.services = { $in: ids };
         }
 
-        // ✅ User filter (matches createdBy OR updatedBy)
         if (user && mongoose.Types.ObjectId.isValid(user)) {
             filter.$or = [
                 { createdBy: new mongoose.Types.ObjectId(user) },
@@ -116,22 +105,22 @@ export const getAllBookings = async (req, res) => {
             ];
         }
 
-        // 📌 Query
+        // Total count
         const total = await Booking.countDocuments(filter);
 
+        // Projection (remove heavy photo fields)
         const projection = `
-      createdAt updatedAt createdBy updatedBy scheduledDate
-      cancelledAt cancelledBy
-      arrivedAt arrivedBy
-      completedAt completedBy
-      status source
-      vehicleRegNo makeModel ownerName ownerAddress
-      ownerPostalCode ownerEmail ownerNumber remarks
-      services labourCost partsCost bookingPrice
-      prebookingServices prebookingLabourCost prebookingPartsCost prebookingBookingPrice
-      bookingConfirmationPhoto bookingConfirmationPhotoCompressed bookingConfirmationPhotoType
-      parts upsells
-    `;
+            createdAt updatedAt createdBy updatedBy scheduledDate
+            cancelledAt cancelledBy
+            arrivedAt arrivedBy
+            completedAt completedBy
+            status source
+            vehicleRegNo makeModel ownerName ownerAddress
+            ownerPostalCode ownerEmail ownerNumber remarks
+            services labourCost partsCost bookingPrice
+            prebookingServices prebookingLabourCost prebookingPartsCost prebookingBookingPrice
+            parts upsells
+        `;
 
         const SLIM_POPULATE = [
             { path: "createdBy", select: "username" },
@@ -151,11 +140,10 @@ export const getAllBookings = async (req, res) => {
             .limit(limit)
             .lean();
 
-        // 📌 Transform
+        // Transform
         const data = bookings.map((b, index) => ({
             id: b._id.toString(),
             rowNumber: skip + index + 1,
-
             bookingDate: b.createdAt,
             updatedDate: b.updatedAt ?? null,
             scheduledDate: b.scheduledDate,
@@ -168,7 +156,6 @@ export const getAllBookings = async (req, res) => {
             completedDate: b.completedAt ?? null,
             completedBy: b.completedBy?.username ?? null,
             status: b.status,
-
             registration: b.vehicleRegNo,
             makeModel: b.makeModel,
             ownerName: b.ownerName,
@@ -176,39 +163,26 @@ export const getAllBookings = async (req, res) => {
             postCode: b.ownerPostalCode,
             email: b.ownerEmail,
             phoneNumber: b.ownerNumber,
-
             remarks: b.remarks ?? null,
             source: b.source ?? null,
-
-            // ✅ Prebooking info
             prebookingServices: Array.isArray(b.prebookingServices)
                 ? b.prebookingServices.map((s) => s?.name || s.toString())
                 : [],
             prebookingLabourCost: b.prebookingLabourCost ?? 0,
             prebookingPartsCost: b.prebookingPartsCost ?? 0,
             prebookingBookingPrice: b.prebookingBookingPrice ?? 0,
-
-            // ✅ Services after arrival
             services: Array.isArray(b.services)
                 ? b.services.map((s) => s?.name).filter(Boolean)
                 : [],
             parts: b.parts ?? [],
             upsells: b.upsells ?? [],
-
             labourCost: b.labourCost ?? 0,
             partsCost: b.partsCost ?? 0,
             bookingPrice: b.bookingPrice ?? 0,
-
-            // ✅ Photos (convert binary buffer → base64 string)
-            bookingConfirmationPhoto: b.bookingConfirmationPhoto
-                ? `data:${b.bookingConfirmationPhotoType};base64,${b.bookingConfirmationPhoto.toString("base64")}`
-                : null,
-            bookingConfirmationPhotoCompressed: b.bookingConfirmationPhotoCompressed
-                ? `data:${b.bookingConfirmationPhotoType};base64,${b.bookingConfirmationPhotoCompressed.toString("base64")}`
-                : null,
+            // ✅ Instead of sending photo, include a URL to fetch via getBookingPhoto
+            bookingPhotoUrl: `/api/bookings/${b._id}/photo?type=compressed`,
         }));
 
-        // 📌 Response
         res.json({
             success: true,
             params: {
@@ -217,7 +191,7 @@ export const getAllBookings = async (req, res) => {
                 toDate: toDate || null,
                 status: status || null,
                 services: services || null,
-                user: user || null, // ✅ added in response
+                user: user || null,
                 sortBy,
                 sortDir: effectiveSortDir,
                 perPage: limit,
