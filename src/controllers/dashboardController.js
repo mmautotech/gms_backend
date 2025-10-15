@@ -1,107 +1,110 @@
 import Invoice from "../models/Invoice.js";
 import Booking from "../models/Booking.js";
 import Service from "../models/Service.js";
-
+import moment from "moment";
 
 // GET /admin/dashboard/stats
 export const getDashboardStats = async (req, res) => {
     try {
-        /** -------------------------------
-         * Revenue by different intervals
-         -------------------------------- */
         const revenue = {};
 
-
         const today = new Date();
-        const past30 = new Date();
-        past30.setDate(today.getDate() - 29); // last 30 days
+        const startOfDay = moment(today).startOf('day').toDate();
+        const past7Days = moment(today).subtract(6, 'days').startOf('day').toDate();
+        const past30Days = moment(today).subtract(29, 'days').startOf('day').toDate();
 
-
-        // Daily Revenue (last 30 days)
-        revenue.daily = await Invoice.aggregate([
-            {
-                $match: {
-                    totalAmount: { $gt: 0 },
-                    invoiceDate: { $gte: past30, $lte: today },
-                },
-            },
-            {
-                $group: {
-                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$invoiceDate" } },
-                    totalRevenue: { $sum: "$totalAmount" },
-                },
-            },
-            { $sort: { "_id": 1 } },
-        ]);
-
-
-        // Weekly Revenue (last 12 weeks)
-        const past12Weeks = new Date();
-        past12Weeks.setDate(today.getDate() - 7 * 11); // last 12 weeks
-
-
-        revenue.weekly = await Invoice.aggregate([
-            {
-                $match: {
-                    totalAmount: { $gt: 0 },
-                    invoiceDate: { $gte: past12Weeks, $lte: today },
-                },
-            },
-            {
-                $group: {
-                    _id: {
-                        isoWeek: { $isoWeek: "$invoiceDate" },
-                        year: { $year: "$invoiceDate" },
-                    },
-                    totalRevenue: { $sum: "$totalAmount" },
-                },
-            },
-            { $sort: { "_id.year": 1, "_id.isoWeek": 1 } },
-        ]);
-
-
-        // Monthly Revenue (for all months)
-        const revenueData = await Invoice.aggregate([
-            { $match: { totalAmount: { $gt: 0 } } },
-            {
-                $group: {
-                    _id: { $month: "$invoiceDate" },
-                    totalRevenue: { $sum: "$totalAmount" },
-                },
-            },
-            { $sort: { "_id": 1 } },
-        ]);
-        const monthlyRevenue = Array(12).fill(0);
-        revenueData.forEach((r) => {
-            if (r._id >= 1 && r._id <= 12) monthlyRevenue[r._id - 1] = r.totalRevenue;
+        // -----------------------------
+        // Daily Revenue (today by hour)
+        // -----------------------------
+        const dailyInvoices = await Invoice.find({
+            status: "Receivable",
+            createdAt: { $gte: startOfDay, $lte: today },
         });
-        revenue.monthly = monthlyRevenue;
 
+        revenue.daily = dailyInvoices.map(inv => ({
+            time: moment(inv.createdAt).format('HH:mm'),
+            totalRevenue: inv.totalAmount
+        }));
 
-        // Yearly Revenue
-        revenue.yearly = await Invoice.aggregate([
-            { $match: { totalAmount: { $gt: 0 } } },
-            {
-                $group: {
-                    _id: { $year: "$invoiceDate" },
-                    totalRevenue: { $sum: "$totalAmount" },
+        // -----------------------------
+        // Weekly Revenue (last 7 days)
+        // -----------------------------
+        const weeklyInvoices = await Invoice.find({
+            status: "Receivable",
+            createdAt: { $gte: past7Days, $lte: today },
+        });
+
+        revenue.weekly = [];
+        for (let i = 0; i < 7; i++) {
+            const day = moment(past7Days).add(i, 'days');
+            const dayRevenue = weeklyInvoices
+                .filter(inv => moment(inv.createdAt).isSame(day, 'day'))
+                .reduce((sum, inv) => sum + inv.totalAmount, 0);
+            revenue.weekly.push({ _id: day.format('YYYY-MM-DD'), totalRevenue: dayRevenue });
+        }
+
+        // -----------------------------
+        // Monthly Revenue (per month)
+        // -----------------------------
+        revenue.monthly = [];
+        for (let i = 0; i < 12; i++) {
+            const monthStart = moment(today).startOf('year').add(i, 'months').startOf('month');
+            let monthEnd = moment(monthStart).endOf('month');
+            if (monthEnd.isAfter(today)) monthEnd = moment(today);
+
+            const monthRevenue = await Invoice.aggregate([
+                {
+                    $match: {
+                        status: "Receivable",
+                        createdAt: { $gte: monthStart.toDate(), $lte: monthEnd.toDate() }
+                    }
                 },
-            },
-            { $sort: { "_id": 1 } },
-        ]);
+                { $group: { _id: null, total: { $sum: "$totalAmount" } } }
+            ]);
 
+            revenue.monthly.push({
+                _id: monthStart.format('MMM'),
+                totalRevenue: monthRevenue[0]?.total || 0
+            });
+        }
 
-        /** -------------------------------
-         * Service Trends by Interval
-         -------------------------------- */
+        // -----------------------------
+        // Yearly Revenue (group by year)
+        // -----------------------------
+        const firstInvoice = await Invoice.findOne({ status: "Receivable" }).sort({ createdAt: 1 });
+        const startYear = firstInvoice ? moment(firstInvoice.createdAt).year() : moment(today).year();
+        const currentYear = moment(today).year();
+
+        revenue.yearly = [];
+        for (let y = startYear; y <= currentYear; y++) {
+            const yearStart = moment().year(y).startOf('year');
+            const yearEnd = moment().year(y).endOf('year');
+            const yearRevenue = await Invoice.aggregate([
+                {
+                    $match: {
+                        status: "Receivable",
+                        createdAt: { $gte: yearStart.toDate(), $lte: yearEnd.toDate() }
+                    }
+                },
+                { $group: { _id: null, total: { $sum: "$totalAmount" } } }
+            ]);
+
+            revenue.yearly.push({
+                _id: y.toString(),
+                totalRevenue: yearRevenue[0]?.total || 0
+            });
+        }
+
+        // -----------------------------
+        // Service Trends by Interval
+        // -----------------------------
         const serviceTrends = {};
         const intervals = [
-            { name: "daily", start: past30, format: "%Y-%m-%d" },
-            { name: "weekly", start: past12Weeks, format: "%Y-%U" },
+            { name: "daily", start: past30Days, format: "%Y-%m-%d" },
+            { name: "weekly", start: past7Days, format: "%Y-%U" },
             { name: "monthly", start: null, format: "%Y-%m" },
             { name: "yearly", start: null, format: "%Y" },
         ];
-
 
         for (const interval of intervals) {
             const matchStage = { prebookingServices: { $ne: null } };
@@ -111,7 +114,6 @@ export const getDashboardStats = async (req, res) => {
                     { bookingDate: null, createdAt: { $gte: interval.start, $lte: today } },
                 ];
             }
-
 
             const data = await Booking.aggregate([
                 { $unwind: "$prebookingServices" },
@@ -149,38 +151,28 @@ export const getDashboardStats = async (req, res) => {
                 { $sort: { period: 1, count: -1 } },
             ]);
 
-
             serviceTrends[interval.name] = data;
         }
 
-
-        /** -------------------------------
-         * Booking Stats (Fixed)
-         -------------------------------- */
+        // -----------------------------
+        // Booking Stats
+        // -----------------------------
         const bookingStatusData = await Booking.aggregate([
             { $group: { _id: "$status", count: { $sum: 1 } } },
         ]);
 
-
         const allStatuses = ["pending", "arrived", "completed", "cancelled"];
         const bookings = { total: await Booking.countDocuments() };
-
-
-        // initialize all statuses with 0
-        for (const status of allStatuses) {
-            bookings[status] = 0;
-        }
-
+        allStatuses.forEach((status) => (bookings[status] = 0));
 
         bookingStatusData.forEach((b) => {
             const key = (b._id || "").toLowerCase();
             bookings[key] = b.count;
         });
 
-
-        /** -------------------------------
-         * Response
-         -------------------------------- */
+        // -----------------------------
+        // Send Response
+        // -----------------------------
         res.json({
             success: true,
             message: "Dashboard stats fetched successfully",

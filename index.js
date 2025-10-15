@@ -94,7 +94,7 @@ app.use((err, req, res, _next) => {
 const { MONGO_URI, PORT = 5000 } = process.env;
 
 mongoose
-    .connect(MONGO_URI, { dbName: 'Gms' })
+    .connect(MONGO_URI, { dbName: 'gms_db' })
     .then(() => {
         console.log('✅ MongoDB connected to gms_db');
 

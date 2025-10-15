@@ -119,7 +119,7 @@ const generateInvoicePdf = (invoice, res, disposition = "inline", isProforma = f
     y += rowH + 20;
 
     // 🧾 Footer Notes
-    y += 60;
+    y += 90;
     doc.font("Helvetica").fontSize(8);
     doc.text(
         "We are responsible for job done (above-mentioned) only. Please contact our customer service number in case of any issue relevant to job done.",
