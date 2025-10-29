@@ -26,8 +26,8 @@ const app = express();
 const corsOptions = {
     origin: [
         'http://localhost:3000',
-        'http://192.168.18.84:3000', // for frontend running on another PC
-        'http://192.168.18.84'       // for built Electron app
+        'http://192.168.18.69:3000', // for frontend running on another PC
+        'http://192.168.18.69'       // for built Electron app
     ],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -106,8 +106,8 @@ mongoose
             cors: {
                 origin: [
                     'http://localhost:3000',
-                    'http://192.168.18.84:3000',
-                    'http://192.168.18.84'
+                    'http://192.168.18.69:3000',
+                    'http://192.168.18.69'
                 ],
                 methods: ['GET', 'POST'],
                 credentials: true,
@@ -126,7 +126,7 @@ mongoose
 
         // Start server
         server.listen(PORT, "0.0.0.0", () => {
-            console.log(`🚀 API + Socket.IO running at http://192.168.18.84:${PORT}`);
+            console.log(`🚀 API + Socket.IO running at http://192.168.18.69:${PORT}`);
         });
 
     })
