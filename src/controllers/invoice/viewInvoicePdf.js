@@ -118,32 +118,28 @@ const generateInvoicePdf = (invoice, res, disposition = "inline", isProforma = f
     drawCell(`£${total.toFixed(2)}`, startX + 400, y, 160, rowH, "right", true);
     y += rowH + 20;
 
-    // 🧾 Footer Notes
-    y += 90;
-    doc.font("Helvetica").fontSize(8);
-    doc.text(
-        "We are responsible for job done (above-mentioned) only. Please contact our customer service number in case of any issue relevant to job done.",
-        startX,
-        y,
-        { width: tableWidth, align: "justify" }
-    );
-    doc.moveDown(0.5);
-    doc.text(
-        "Parts replaced can be taken at the time of car collection; later we dispose them. Please check your belongings before leaving the garage.",
-        { width: tableWidth, align: "justify" }
-    );
-    doc.moveDown(0.5);
-    doc.text("SOP: 50% advance is required before starting the job.", {
-        width: tableWidth,
-        align: "justify",
-    });
-    doc.moveDown(0.5);
-    doc.text("Bank Details: Perivale Motor Services1 LTD, Sort Code: 30-54-66, Account No: 32006468", {
-        width: tableWidth,
-        align: "justify",
-    });
-    doc.moveDown(1);
-    doc.text("For __ PERIVALE MOTORS", { align: "left" });
+  // 🧾 Footer Notes
+y += 90;
+doc.font("Helvetica").fontSize(8);
+doc.text(
+    "We are responsible only for the work described above. Please contact our customer service in case of any issues related to the completed work. "
+    + "Parts replaced can be collected at the time of vehicle collection; any remaining parts will be disposed of, so please check your belongings before leaving the garage. "
+    + "The customer has performed a test drive, confirmed that all completed work meets their satisfaction, and has reviewed all dashboard indicators before leaving the garage. "
+    + "By accepting this invoice, the customer acknowledges full satisfaction with the services provided. "
+    + "SOP: 50% advance is required before starting the job.",
+    startX,
+    y,
+    { width: tableWidth, align: "justify" }
+);
+
+doc.moveDown(0.5);
+doc.text(
+    "Bank Details: Perivale Motor Services1 LTD, Sort Code: 30-54-66, Account No: 32006468",
+    { width: tableWidth, align: "justify" }
+);
+doc.moveDown(1);
+doc.text("For __ PERIVALE MOTORS", { align: "left" });
+
 
     doc.end();
 };

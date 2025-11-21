@@ -1,6 +1,7 @@
 // src/controllers/bookings/updateBookingStatus.js
 import mongoose from "mongoose";
 import Booking from "../../models/Booking.js";
+import Invoice from "../../models/Invoice.js"; // ✅ add import
 import { sendError } from "../../utils/errorHandler.js";
 import { BOOKING_STATUS } from "../../constants/bookingConstants.js";
 
@@ -35,6 +36,18 @@ export const updateBookingStatus = async (req, res) => {
             );
         }
 
+        // 🚫 Prevent marking as COMPLETED if no invoice exists
+        if (normalizedStatus === BOOKING_STATUS.COMPLETED) {
+            const invoiceExists = await Invoice.exists({ booking: booking._id });
+            if (!invoiceExists) {
+                return sendError(
+                    res,
+                    400,
+                    "Please generate an invoice before marking this booking as completed."
+                );
+            }
+        }
+
         const previousStatus = booking.status;
         const userId = req.user?._id;
         const userName = req.user?.username || "Unknown user";
@@ -64,7 +77,7 @@ export const updateBookingStatus = async (req, res) => {
         // ✅ Emit socket updates to all connected clients
         const io = req.app.get("io");
 
-        // Broadcast the general status change
+        // Broadcast general status change
         io.emit("booking:statusChanged", {
             _id: booking._id,
             status: booking.status,
@@ -74,14 +87,11 @@ export const updateBookingStatus = async (req, res) => {
 
         // 🚗 Special logic for PreBooking ↔ CarIn transition
         if (previousStatus === BOOKING_STATUS.PENDING && normalizedStatus === BOOKING_STATUS.ARRIVED) {
-            // Remove from PreBooking lists
             io.emit("booking:removedFromPreBooking", { _id: booking._id });
-            // Add to CarIn lists
             io.emit("booking:addedToCarIn", booking);
         }
 
         if (previousStatus === BOOKING_STATUS.ARRIVED && normalizedStatus === BOOKING_STATUS.COMPLETED) {
-            // Remove from CarIn list
             io.emit("booking:removedFromCarIn", { _id: booking._id });
         }
 
